@@ -314,10 +314,10 @@ if __name__ == "__main__":
 	#algo.screen_output = True
 
 	# Pinpoint
-	x0 = random() * (10. + 10.) -10.
+	x0 = random() * (100. + 100.) - 100.
 	y0 = random() * (2000. - 500.) + 500.
 	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (10. + 10.) - 10.
+	vx0 = random() * (100. + 100.) - 10.
 	vy0 = random() * (10. + 30.) - 30.
 	state0 = [x0, y0, vx0, vy0, m0]
 

@@ -8,7 +8,7 @@ Dario Izzo 2016
 
 from PyGMO.problem._base import base
 from numpy.linalg import norm
-from math import sqrt, sin, cos
+from math import sqrt, sin, cos, atan2
 from scipy.integrate import odeint
 from numpy import linspace
 from copy import deepcopy
@@ -251,11 +251,13 @@ class simple_landing(base):
 
 		x = list(); y=list()
 		vx = list(); vy = list()
+		m = list()
 		for state in res:
 			x.append(state[0])
 			y.append(state[1])
 			vx.append(state[2])
 			vy.append(state[3])
+			m.append(state[4])
 
 		fig = plt.figure()
 		ax = fig.gca()
@@ -268,14 +270,17 @@ class simple_landing(base):
 		axarr[0,0].plot(x, y)
 		axarr[0,0].set_xlabel('x'); axarr[0,0].set_ylabel('y'); 
 
-
 		axarr[1,0].plot(vx, vy)
 		axarr[1,0].set_xlabel('vx'); axarr[1,0].set_ylabel('vy');
 
+		axarr[2,0].plot(tspan, m)
+
 		axarr[0,1].plot(tspan, [controls[ix][0] for ix in range(len(controls))],'r')
-		axarr[0,1].set_ylabel('u,uR,uL')
+		axarr[0,1].set_ylabel('u')
 		axarr[0,1].set_xlabel('t')
-		axarr[1,1].plot(tspan, [controls[ix][1] for ix in range(len(controls))],'k')
+		axarr[1,1].plot(tspan, [atan2(controls[ix][1], controls[ix][2]) for ix in range(len(controls))],'k')
+		axarr[1,1].set_ylabel('theta')
+		axarr[1,1].set_xlabel('t')
 		axarr[2,1].plot(tspan, [controls[ix][2] for ix in range(len(controls))],'k')
 
 
@@ -283,19 +288,22 @@ class simple_landing(base):
 		plt.show()
 		return axarr
 
-
 	def human_readable_extra(self):
 		s = "\n\tDimensional inputs:\n"
 		s = s + "\tStarting state: " + str(self.state0_input) + "\n"
 		s = s + "\tTarget state: " + str(self.statet_input) + "\n"
-		s = s + "\tThrusters maximum magnitude [N]: " + str([it * self.F for it in self.cs]) + "\n"
-		s = s + "\tIsp: " + str(self.Isp * self.T) + ", Rdist: " + str(self.Rdist * self.R) + ", gravity: " + str(self.g * self.A) + "\n\n"
+		s = s + "\tThrusters maximum magnitude [N]: " + str(self.c * self.F) + "\n"
+		s = s + "\tIsp: " + str(self.Isp * self.T) + ", gravity: " + str(self.g * self.A) + "\n"
 
 		s = s + "\n\tNon - Dimensional inputs:\n"
 		s = s + "\tStarting state: " + str(self.state0) + "\n"
 		s = s + "\tTarget state: " + str(self.statet) + "\n"
-		s = s + "\tThrusters maximum magnitude [N]: " + str(self.cs) + "\n"
-		s = s + "\tIsp: " + str(self.Isp) + ", Rdist: " + str(self.Rdist) + ", gravity: " + str(self.g) + "\n\n"
+		s = s + "\tThrusters maximum magnitude [N]: " + str(self.c) + "\n"
+		s = s + "\tIsp: " + str(self.Isp) + ", gravity: " + str(self.g) + "\n\n"
+		
+		s = s + "\tObjective function: " + self.objfun_type + "\n"
+		s = s + "\tPinpoint?: " + str(self.pinpoint)
+
 		return s
 
 if __name__ == "__main__":
@@ -314,16 +322,16 @@ if __name__ == "__main__":
 	state0 = [x0, y0, vx0, vy0, m0]
 
 	# Free
-	x0 = 0. #irrelevant
-	y0 = random() * (2000. - 500.) + 500.
-	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (100. + 100.) - 100.
-	vy0 = random() * (10. + 30.) - 30.
-	state0 = [x0, y0, vx0, vy0, m0]
+	#x0 = 0. #irrelevant
+	#y0 = random() * (2000. - 500.) + 500.
+	#m0 = random() * (12000. - 8000.) + 8000.
+	#vx0 = random() * (100. + 100.) - 100.
+	#vy0 = random() * (10. + 30.) - 30.
+	#state0 = [x0, y0, vx0, vy0, m0]
 
 
 	print("Trying I.C. {}".format(state0)),
-	probMOC = simple_landing(state0 = state0, objfun_type="MOC", pinpoint=False)
+	probMOC = simple_landing(state0 = state0, objfun_type="MOC", pinpoint=True)
 	count = 1
 	for i in range(1, 20):
 		print("Attempt # {}".format(i))

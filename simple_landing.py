@@ -1,6 +1,6 @@
 """
 Implements an indirect method to solve the optimal control problem of a 
-three engine spacecraft (Model 2)
+varying mass spacecraft
 
 Dario Izzo 2016
 
@@ -15,7 +15,6 @@ from copy import deepcopy
 
 
 class simple_landing(base):
-
 	def __init__(
 			self,
 			state0 = [0., 1000., 20., -5., 10000.],
@@ -34,6 +33,8 @@ class simple_landing(base):
 		* Isp: engine specific impulse (sec.)
 		* c: maximum thrusts for the main thruster (N)
 		* g: planet gravity [m/s**2]
+		* objfun_type: one of "QC", "MOC" switching from Quadratic to Mass Optimal
+		* pinpoint: if True toggles the final constraint on the landing x
 		"""
 
 		super(simple_landing, self).__init__(6, 0, 1, 6, 0, 1e-8)
@@ -42,7 +43,7 @@ class simple_landing(base):
 		self.state0_input = state0
 		self.statet_input = statet
 
-		# We compute the non dimensional units
+		# We define the non dimensional units (will use these from here on)
 		self.R = 1000.
 		self.V = 100.
 		self.M = 10000.
@@ -70,8 +71,7 @@ class simple_landing(base):
 		self.pinpoint = pinpoint
 
 	def _objfun_impl(self, x):
-		#xf, info = self._shoot(x)
-		return(1.,) # constraint satisfaction
+		return(1.,) # constraint satisfaction, no objfun
 
 	def _compute_constraints_impl(self, x):
 		# Perform one forward shooting
@@ -79,16 +79,8 @@ class simple_landing(base):
 
 		# Assembling the equality constraint vector
 		ceq = list([0]*6)
+
 		# Final conditions
-		ceq[1] = (xf[-1][1] - self.statet[1] ) * 100.
-		ceq[2] = (xf[-1][2] - self.statet[2] ) * 100.
-		ceq[3] = (xf[-1][3] - self.statet[3] ) * 100.
-		
-
-		# Transversality condition on mass (free)
-		#ceq[0] = xf[-1][5] * 100.
-		ceq[4] = xf[-1][9] * 100.
-
 		if self.pinpoint:
 			#Pinpoint landing x is fixed lx is free
 			ceq[0] = (xf[-1][0] - self.statet[0] ) * 100
@@ -96,13 +88,19 @@ class simple_landing(base):
 			#Transversality condition: x is free lx is 0
 			ceq[0] = xf[-1][5] * 100.
 
+		ceq[1] = (xf[-1][1] - self.statet[1] ) * 100.
+		ceq[2] = (xf[-1][2] - self.statet[2] ) * 100.
+		ceq[3] = (xf[-1][3] - self.statet[3] ) * 100.
+		
+		# Transversality condition on mass (free)
+		ceq[4] = xf[-1][9] * 100.
+
 		# Free time problem, Hamiltonian must be 0
 		ceq[5] = self._hamiltonian(xf[-1]) * 100.
 
 		return ceq
 
 	def _hamiltonian(self, full_state):
-
 		state = full_state[:5]
 		costate = full_state[5:]
 
@@ -158,7 +156,6 @@ class simple_landing(base):
 
 		# Equations for the costate
 		lvdotitheta = lvx * stheta + lvy * ctheta
-
 		dlx = 0.
 		dly = 0.
 		dlvx = - lx
@@ -179,7 +176,7 @@ class simple_landing(base):
 
 		if self.objfun_type == "QC":
 			# Quadratic Control
-			u = 1. / c * (lm + lv_norm * Isp * g0 / m)
+			u = 1. / c / 2. * (lm + lv_norm * Isp * g0 / m)
 			u = min(u,1.)
 			u = max(u,0.)
 		elif self.objfun_type == "MOC":
@@ -314,24 +311,24 @@ if __name__ == "__main__":
 	#algo.screen_output = True
 
 	# Pinpoint
-	x0 = random() * (100. + 100.) - 100.
-	y0 = random() * (2000. - 500.) + 500.
-	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (100. + 100.) - 10.
-	vy0 = random() * (10. + 30.) - 30.
-	state0 = [x0, y0, vx0, vy0, m0]
-
-	# Free
-	#x0 = 0. #irrelevant
+	#x0 = random() * (100. + 100.) - 100.
 	#y0 = random() * (2000. - 500.) + 500.
 	#m0 = random() * (12000. - 8000.) + 8000.
-	#vx0 = random() * (100. + 100.) - 100.
+	#vx0 = random() * (100. + 100.) - 10.
 	#vy0 = random() * (10. + 30.) - 30.
 	#state0 = [x0, y0, vx0, vy0, m0]
 
+	# Free
+	x0 = 0. #irrelevant
+	y0 = random() * (2000. - 500.) + 500.
+	m0 = random() * (12000. - 8000.) + 8000.
+	vx0 = random() * (100. + 100.) - 100.
+	vy0 = random() * (10. + 30.) - 30.
+	state0 = [x0, y0, vx0, vy0, m0]
+
 
 	print("Trying I.C. {}".format(state0)),
-	probMOC = simple_landing(state0 = state0, objfun_type="MOC", pinpoint=True)
+	probMOC = simple_landing(state0 = state0, objfun_type="QC", pinpoint=False)
 	count = 1
 	for i in range(1, 20):
 		print("Attempt # {}".format(i))

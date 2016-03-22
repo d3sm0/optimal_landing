@@ -350,7 +350,7 @@ if __name__ == "__main__":
 	
 	print("IC: {}".format(state0))
 
-	for i in range(1, 20):
+	for i in range(1, 15):
 		# Start with attempts
 		print("Attempt # {}".format(i))
 		pop = population(prob, 1)
@@ -375,7 +375,7 @@ if __name__ == "__main__":
 	x = pop.champion.x
 
 	print(lower, homotopy, end="")
-	
+
 	while True:
 		if homotopy > 1:
 			homotopy=1.

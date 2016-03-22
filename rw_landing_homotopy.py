@@ -367,11 +367,15 @@ if __name__ == "__main__":
 			break
 		
 
-	print(prob.feasibility_x(pop[0].cur_x))
+	print("Found QC solution!! Starting Homotopy")
+	print("from to:")
 
 	lower = 0
 	homotopy = 0.1
 	x = pop.champion.x
+
+	print(lower, homotopy, end="")
+	
 	while True:
 		if homotopy > 1:
 			homotopy=1.
@@ -382,10 +386,14 @@ if __name__ == "__main__":
 		if (prob.feasibility_x(pop[0].cur_x)):
 			x = pop.champion.x
 			if homotopy ==1:
+				print(" Success")
 				break
 			lower = homotopy
 			homotopy = homotopy + 0.1
-			print(lower, homotopy)
+			homotopy = min(homotopy, 1)
+			print(" Success")
+			print(lower, homotopy, end="")
 		else:
 			homotopy = homotopy - (homotopy - lower)/3.
-			print(lower, homotopy)
+			print(" Failed")
+			print(lower, homotopy, end="")

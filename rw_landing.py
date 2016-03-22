@@ -345,14 +345,12 @@ if __name__ == "__main__":
 
 	theta0 = random() * (pi/20 + pi/20) - pi/20
 	state0 = [x0, y0, vx0, vy0, theta0, m0]
-	#state0QC = [0.0, 1827.6902132869502, -90.88322286761958, -14.254540109165745, -0.11310263656480504, 8839.159127886493]
-	#icQC = (-1.281602198669613e-18, 0.0002267351093470856, -0.007299206134888423, -0.005225744833937544, -0.004746186496715307, 0.02479320775835941, 12.323444048459042)
-	probMOC = rw_landing(state0 = state0, pinpoint=False, objfun_type="QC")
-	for i in range(1, 20):
-		# Randomly create lagrange multipliers around 0
-		#ic = [(random() * 2 - 1)*1e-4 for it in range(6)]
-		#ic = ic + [random() * 100 / probMOC.T + 1e-4]
 
+	probMOC = rw_landing(state0 = state0, pinpoint=False, objfun_type="QC")
+	
+	print("IC: {}".format(state0))
+
+	for i in range(1, 20):
 		# Start with attempts
 		print("Attempt # {}".format(i))
 		popMOC = population(probMOC, 1)

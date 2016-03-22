@@ -329,24 +329,24 @@ if __name__ == "__main__":
 	#algo.screen_output = True
 
 	# Pinpoint
-	#x0 = random() * (100. + 100.) - 100.
-	#y0 = random() * (2000. - 500.) + 500.
-	#m0 = random() * (12000. - 8000.) + 8000.
-	#vx0 = random() * (100. + 100.) - 10.
-	#vy0 = random() * (10. + 30.) - 30.
-	#state0 = [x0, y0, vx0, vy0, m0]
-
-	# Free
-	x0 = 0. #irrelevant
+	x0 = random() * (100. + 100.) - 100.
 	y0 = random() * (2000. - 500.) + 500.
 	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (100. + 100.) - 100.
+	vx0 = random() * (10. + 10.) - 10.
 	vy0 = random() * (10. + 30.) - 30.
+	state0 = [x0, y0, vx0, vy0, m0]
+
+	# Free
+	#x0 = 0. #irrelevant
+	#y0 = random() * (2000. - 500.) + 500.
+	#m0 = random() * (12000. - 8000.) + 8000.
+	#vx0 = random() * (100. + 100.) - 100.
+	#vy0 = random() * (10. + 30.) - 30.
 
 	theta0 = random() * (pi/20 + pi/20) - pi/20
 	state0 = [x0, y0, vx0, vy0, theta0, m0]
 
-	probMOC = rw_landing(state0 = state0, pinpoint=False, objfun_type="QC")
+	probMOC = rw_landing(state0 = state0, pinpoint=True, objfun_type="QC")
 	
 	print("IC: {}".format(state0))
 

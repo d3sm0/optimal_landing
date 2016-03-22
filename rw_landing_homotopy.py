@@ -371,7 +371,7 @@ if __name__ == "__main__":
 	print("from to:")
 
 	lower = 0
-	homotopy = 0.1
+	homotopy = 0.03
 	x = pop.champion.x
 
 	print(lower, homotopy, end="")
@@ -389,7 +389,7 @@ if __name__ == "__main__":
 				print(" Success")
 				break
 			lower = homotopy
-			homotopy = homotopy + 0.1
+			homotopy = homotopy + 0.03
 			homotopy = min(homotopy, 1)
 			print(" Success")
 			print(lower, homotopy, end="")

@@ -12,7 +12,9 @@ from numpy.linalg import norm
 from math import sqrt, sin, cos, atan2, pi
 from scipy.integrate import odeint
 from numpy import linspace
+from numpy.linalg import norm
 from copy import deepcopy
+import sys
 
 
 class rw_landing(base):
@@ -211,12 +213,12 @@ class rw_landing(base):
 
 	def _shoot(self, x):
 		# Numerical Integration
-		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],100), rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],100), rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
 		return xf, info
 
 	def _simulate(self, x, tspan):
 		# Numerical Integration
-		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
 		return xf, info
 
 	def _non_dim(self, state):
@@ -324,37 +326,36 @@ class rw_landing(base):
 if __name__ == "__main__":
 	from PyGMO import *
 	from random import random
-	algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-9)
+	algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-7)
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
-	#algo.screen_output = True
+	algo.screen_output = True
+
+
+	vx0b = [-10, 10]
+	vy0b = [-30, 10]
+	x0b = [-100, 100]
+	y0b = [500, 2000]
 
 	# Pinpoint
-	x0 = random() * (100. + 100.) - 100.
-	y0 = random() * (2000. - 500.) + 500.
+	x0 = random() * (x0b[1] - x0b[0]) + x0b[0]
+	y0 = random() * (y0b[1] - y0b[0]) + y0b[0]
 	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (10. + 10.) - 10.
-	vy0 = random() * (10. + 30.) - 30.
-	state0 = [x0, y0, vx0, vy0, m0]
-	
-	# Free
-	#x0 = 0. #irrelevant
-	#y0 = random() * (2000. - 500.) + 500.
-	#m0 = random() * (12000. - 8000.) + 8000.
-	#vx0 = random() * (100. + 100.) - 100.
-	#vy0 = random() * (10. + 30.) - 30.
-
+	vx0 = random() * (vx0b[1] - vx0b[0]) + vx0b[0]
+	vy0 = random() * (vy0b[1] - vy0b[0]) + vy0b[0]
 	theta0 = random() * (pi/20 + pi/20) - pi/20
+
 	state0 = [x0, y0, vx0, vy0, theta0, m0]
 
 	prob = rw_landing(state0 = state0, pinpoint=True, homotopy=0.)
 	
 	print("IC: {}".format(state0))
 
-	for i in range(1, 15):
+	for i in range(1, 2):
 		# Start with attempts
 		print("Attempt # {}".format(i))
 		pop = population(prob, 1)
-		#popMOC.push_back(ic)
+		#pop.push_back([0,0,0,0,0,0,5.])
+		pop = algo.evolve(pop)
 		pop = algo.evolve(pop)
 
 		print("c: ",end="")
@@ -366,34 +367,56 @@ if __name__ == "__main__":
 		if (prob.feasibility_x(pop[0].cur_x)):
 			break
 		
-
-	print("Found QC solution!! Starting Homotopy")
+	if not prob.feasibility_x(pop[0].cur_x):
+		print("No QC solution! Ending here :(")
+		sys.exit(0)
+	else: 
+		print("Found QC solution!! Starting Homotopy")
 	print("from to:")
+	
+	# Starting homotopy
+	h_min = 1e-4
+	h_max = 0.1
+	h = 0.1
+	trial_alpha = h
+	alpha = 0
+	x = pop[0].cur_x
 
-	lower = 0
-	homotopy = 0.03
-	x = pop.champion.x
-
-	print(lower, homotopy, end="")
-
+	algo.screen_output = False
 	while True:
-		if homotopy > 1:
-			homotopy=1.
-		prob = rw_landing(state0 = state0, pinpoint=True, homotopy=homotopy)
+		if trial_alpha > 1:
+			trial_alpha = 1.
+		print("{0:.5g}, {1:.5g}".format(alpha, trial_alpha), end="")
+		print("({})".format(h), end="")
+		prob = rw_landing(state0 = state0, pinpoint=True, homotopy=trial_alpha)
+
 		pop = population(prob)
 		pop.push_back(x)
 		pop = algo.evolve(pop)
+
+		if not (prob.feasibility_x(pop[0].cur_x)):
+			pop = algo.evolve(pop)
+			pop = algo.evolve(pop)
+			pop = algo.evolve(pop)
+
 		if (prob.feasibility_x(pop[0].cur_x)):
 			x = pop.champion.x
-			if homotopy ==1:
+			if trial_alpha == 1:
 				print(" Success")
 				break
-			lower = homotopy
-			homotopy = homotopy + 0.03
-			homotopy = min(homotopy, 1)
 			print(" Success")
-			print(lower, homotopy, end="")
+			h = h * 2.
+			h = min(h, h_max)
+			alpha = trial_alpha
+			trial_alpha = trial_alpha + h
 		else:
-			homotopy = homotopy - (homotopy - lower)/3.
-			print(" Failed")
-			print(lower, homotopy, end="")
+			print(" - Failed, ", end="")
+			print("norm c: {0:.4g}".format(norm(pop[0].cur_x)))
+			h = h * 0.5
+			if h < h_min:
+				print("\nContinuation step too small aborting :(")
+				dd
+				sys.exit(0)
+			trial_alpha = alpha + h
+
+

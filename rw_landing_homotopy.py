@@ -28,7 +28,7 @@ class rw_landing(base):
 			pinpoint = False
 			):
 		"""
-		USAGE: reachable(self, start, end, Isp, Tmax, mu):
+		USAGE: rw_landing(self, start, end, Isp, Tmax, mu):
 
 		* state0: initial state [x, y, vx, vy, theta, m] in m, m , m/s, m/s, rad, kg
 		* statet: target state [x, y, vx, vy, theta, m] in m, m, m/s, m/s, rad, kg
@@ -335,7 +335,7 @@ if __name__ == "__main__":
 	vx0 = random() * (10. + 10.) - 10.
 	vy0 = random() * (10. + 30.) - 30.
 	state0 = [x0, y0, vx0, vy0, m0]
-
+	
 	# Free
 	#x0 = 0. #irrelevant
 	#y0 = random() * (2000. - 500.) + 500.

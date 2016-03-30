@@ -12,6 +12,7 @@ from math import sqrt, sin, cos, atan2
 from scipy.integrate import odeint
 from numpy import linspace
 from copy import deepcopy
+import sys
 
 
 class simple_landing(base):
@@ -19,10 +20,10 @@ class simple_landing(base):
 			self,
 			state0 = [0., 1000., 20., -5., 10000.],
 			statet = [0., 0., 0., 0, 9758.695805],
-			Isp=311.,
-			c=44000.,
+			c1=44000.,
+			c2 = 311. * 9.81,
 			g = 1.6229,
-			objfun_type = "QC",
+			homotopy = 0.,
 			pinpoint = False
 			):
 		"""
@@ -30,14 +31,14 @@ class simple_landing(base):
 
 		* state0: initial state [x, y, vx, vy, m] in m,m,m/s,m/s,kg
 		* statet: target state [x, y, vx, vy, m] in m,m,m/s,m/s,kg
-		* Isp: engine specific impulse (sec.)
-		* c: maximum thrusts for the main thruster (N)
+		* c1: maximum thrusts for the main thruster (N)
+		* c2: veff, Isp*g0 (m / s)
 		* g: planet gravity [m/s**2]
-		* objfun_type: one of "QC", "MOC" switching from Quadratic to Mass Optimal
+		* homotopy: homotopy parameter, 0->QC, 1->MOC
 		* pinpoint: if True toggles the final constraint on the landing x
 		"""
 
-		super(simple_landing, self).__init__(6, 0, 1, 6, 0, 1e-8)
+		super(simple_landing, self).__init__(6, 0, 1, 6, 0, 1e-4)
 
 		# We store the raw inputs for convenience
 		self.state0_input = state0
@@ -52,10 +53,9 @@ class simple_landing(base):
 		self.F = self.M * self.A
 
 		# We store the parameters
-		self.Isp = Isp / self.T
-		self.c = c / self.F
+		self.c1 = c1 / self.F
+		self.c2 = c2 / self.V
 		self.g = g / self.A
-		self.G0 =  9.81 / self.A
 
 		# We compute the initial and final state in the new units
 		self.state0 = self._non_dim(self.state0_input)
@@ -64,11 +64,11 @@ class simple_landing(base):
 		# We set the bounds (these will only be used to initialize the population)
 		self.set_bounds([-1.] * 5 + [1e-04], [1.] * 5 + [100. / self.T])
 
-		# This switches between MOC and QC
-		self.objfun_type = objfun_type
-
 		# Activates a pinpoint landing
 		self.pinpoint = pinpoint
+
+		# Stores the homotopy parameter, 0->QC, 1->MOC
+		self.homotopy = homotopy
 
 	def _objfun_impl(self, x):
 		return(1.,) # constraint satisfaction, no objfun
@@ -83,20 +83,20 @@ class simple_landing(base):
 		# Final conditions
 		if self.pinpoint:
 			#Pinpoint landing x is fixed lx is free
-			ceq[0] = (xf[-1][0] - self.statet[0] ) * 100
+			ceq[0] = (xf[-1][0] - self.statet[0] ) ** 2
 		else:
 			#Transversality condition: x is free lx is 0
-			ceq[0] = xf[-1][5] * 100.
+			ceq[0] = xf[-1][5] ** 2
 
-		ceq[1] = (xf[-1][1] - self.statet[1] ) * 100.
-		ceq[2] = (xf[-1][2] - self.statet[2] ) * 100.
-		ceq[3] = (xf[-1][3] - self.statet[3] ) * 100.
+		ceq[1] = (xf[-1][1] - self.statet[1] ) ** 2
+		ceq[2] = (xf[-1][2] - self.statet[2] ) ** 2
+		ceq[3] = (xf[-1][3] - self.statet[3] ) ** 2
 		
 		# Transversality condition on mass (free)
-		ceq[4] = xf[-1][9] * 100.
+		ceq[4] = xf[-1][9] ** 2
 
 		# Free time problem, Hamiltonian must be 0
-		ceq[5] = self._hamiltonian(xf[-1]) * 100.
+		ceq[5] = self._hamiltonian(xf[-1]) ** 2
 
 		return ceq
 
@@ -120,38 +120,33 @@ class simple_landing(base):
 		return H
 
 	def _cost(self,state, controls):
-		Isp, g0 = [self.Isp, self.G0]
-		c = self.c
+		c1 = self.c1
+		c2 = self.c2
 		u, stheta, ctheta = controls
 
-		if self.objfun_type == "QC":
-			# Quadratic Control
-			retval = c**2 / Isp / g0 * u**2
-		elif self.objfun_type == "MOC":
-			# Mass Optimal
-			retval = c / Isp / g0 * u
+		retval = self.homotopy * c1 / c2 * u + (1 - self.homotopy) * c1**2 / c2 * u**2
 		return retval
 
 	def _eom_state(self, state, controls):
 		# Renaming variables
 		x,y,vx,vy,m = state
-		Isp, g0, g = [self.Isp, self.G0, self.g]
-		c = self.c
+		c1 = self.c1
+		c2 = self.c2
+		g = self.g
 		u, stheta, ctheta = controls
 
 		# Equations for the state
 		dx = vx
 		dy = vy
-		dvx = c * u / m * stheta
-		dvy = c * u / m * ctheta - g
-		dm = - c * u / Isp / g0
+		dvx = c1 * u / m * stheta
+		dvy = c1 * u / m * ctheta - g
+		dm = - c1 * u / c2
 		return [dx, dy, dvx, dvy, dm]
 
 	def _eom_costate(self, full_state, controls):
 		# Renaming variables
 		x,y,vx,vy,m,lx,ly,lvx,lvy,lm = full_state
-		Isp, g0 = [self.Isp, self.G0]
-		c = self.c
+		c1 = self.c1
 		u, stheta, ctheta = controls
 
 		# Equations for the costate
@@ -160,32 +155,31 @@ class simple_landing(base):
 		dly = 0.
 		dlvx = - lx
 		dlvy = - ly
-		dlm =  c * u / m**2 * lvdotitheta
+		dlm =  c1 * u / m**2 * lvdotitheta
 		
 		return [dlx, dly, dlvx, dlvy, dlm]
 
 	def _pontryagin_minimum_principle(self, full_state):
 		# Renaming variables
-		Isp, g0  = [self.Isp, self.G0]
-		c = self.c
+		c1 = self.c1
+		c2 = self.c2
 		x,y,vx,vy,m,lx,ly,lvx,lvy,lm = full_state
 
 		lv_norm = sqrt(lvx**2 + lvy**2)
 		stheta = - lvx / lv_norm
 		ctheta = - lvy / lv_norm
 
-		if self.objfun_type == "QC":
-			# Quadratic Control
-			u = 1. / 2. / c  * (lm + lv_norm * Isp * g0 / m)
-			u = min(u,1.)
-			u = max(u,0.)
-		elif self.objfun_type == "MOC":
+		if self.homotopy == 1:
 			# Minimum mass
-			S = 1. - lm - lv_norm / m * Isp * g0
+			S = 1. - lm - lv_norm / m * c2
 			if S >= 0:
 				u=0.
 			if S < 0:
 				u=1.
+		else:
+			u = 1. / 2. / c1 / (1 - self.homotopy) * (lm + lv_norm * c2 / m - self.homotopy)
+			u = min(u,1.)
+			u = max(u,0.)
 		return [u, stheta, ctheta]
 
 	def _eom(self, full_state, t):
@@ -200,12 +194,12 @@ class simple_landing(base):
 
 	def _shoot(self, x):
 		# Numerical Integration
-		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), [0, x[-1]], rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],100), rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
 		return xf, info
 
 	def _simulate(self, x, tspan):
 		# Numerical Integration
-		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
 		return xf, info
 
 	def _non_dim(self, state):
@@ -289,16 +283,16 @@ class simple_landing(base):
 		s = "\n\tDimensional inputs:\n"
 		s = s + "\tStarting state: " + str(self.state0_input) + "\n"
 		s = s + "\tTarget state: " + str(self.statet_input) + "\n"
-		s = s + "\tThrusters maximum magnitude [N]: " + str(self.c * self.F) + "\n"
-		s = s + "\tIsp: " + str(self.Isp * self.T) + ", gravity: " + str(self.g * self.A) + "\n"
+		s = s + "\tThrusters maximum magnitude [N]: " + str(self.c1 * self.F) + "\n"
+		s = s + "\tIsp * g0: " + str(self.c2 * self.V) + ", gravity: " + str(self.g * self.A) + "\n"
 
 		s = s + "\n\tNon - Dimensional inputs:\n"
 		s = s + "\tStarting state: " + str(self.state0) + "\n"
 		s = s + "\tTarget state: " + str(self.statet) + "\n"
-		s = s + "\tThrusters maximum magnitude [N]: " + str(self.c) + "\n"
-		s = s + "\tIsp: " + str(self.Isp) + ", gravity: " + str(self.g) + "\n\n"
+		s = s + "\tThrusters maximum magnitude [N]: " + str(self.c1) + "\n"
+		s = s + "\tIsp * g0: " + str(self.c2) + ", gravity: " + str(self.g) + "\n\n"
 		
-		s = s + "\tObjective function: " + self.objfun_type + "\n"
+		s = s + "\tHomotopy parameter: " + str(self.homotopy)
 		s = s + "\tPinpoint?: " + str(self.pinpoint)
 
 		return s
@@ -306,7 +300,7 @@ class simple_landing(base):
 if __name__ == "__main__":
 	from PyGMO import *
 	from random import random
-	algo = algorithm.snopt(200, opt_tol=1e-4, feas_tol=1e-9)
+	algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-5)
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
 	#algo.screen_output = True
 
@@ -328,11 +322,12 @@ if __name__ == "__main__":
 
 
 	print("Trying I.C. {}".format(state0)),
-	prob = simple_landing(state0 = state0, objfun_type="QC", pinpoint=False)
+	prob = simple_landing(state0 = state0, homotopy=0., pinpoint=False)
 	count = 1
 	for i in range(1, 20):
 		print("Attempt # {}".format(i), end="")
 		pop = population(prob,1)
+		pop = algo.evolve(pop)
 		pop = algo.evolve(pop)
 		if (prob.feasibility_x(pop[0].cur_x)):
 			print(" - Success, violation norm is: {0:.4g}".format(norm(pop[0].cur_c)))
@@ -342,3 +337,54 @@ if __name__ == "__main__":
 
 	print("PaGMO reports: ", end="")
 	print(prob.feasibility_x(pop[0].cur_x))
+
+	if not prob.feasibility_x(pop[0].cur_x):
+		print("No QC solution! Ending here :(")
+		sys.exit(0)
+	else: 
+		print("Found QC solution!! Starting Homotopy")
+	print("from \t to\t step\t result")
+	
+	# Starting homotopy
+	h_min = 1e-8
+	h_max = 0.5
+	h = 0.1
+	trial_alpha = h
+	alpha = 0
+	x = pop[0].cur_x
+
+	#algo.screen_output = True
+	while True:
+		if trial_alpha > 1:
+			trial_alpha = 1.
+		print("{0:.5g}, \t {1:.5g} \t".format(alpha, trial_alpha), end="")
+		print("({0:.5g})\t".format(h), end="")
+		prob = simple_landing(state0 = state0, pinpoint=False, homotopy=trial_alpha)
+
+		pop = population(prob)
+		pop.push_back(x)
+		pop = algo.evolve(pop)
+
+		if not (prob.feasibility_x(pop[0].cur_x)):
+			pop = algo.evolve(pop)
+			pop = algo.evolve(pop)
+			pop = algo.evolve(pop)
+
+		if (prob.feasibility_x(pop[0].cur_x)):
+			x = pop.champion.x
+			if trial_alpha == 1:
+				print(" Success")
+				break
+			print(" Success")
+			h = h * 2.
+			h = min(h, h_max)
+			alpha = trial_alpha
+			trial_alpha = trial_alpha + h
+		else:
+			print(" - Failed, ", end="")
+			print("norm c: {0:.4g}".format(norm(pop[0].cur_x)))
+			h = h * 0.5
+			if h < h_min:
+				print("\nContinuation step too small aborting :(")
+				sys.exit(0)
+			trial_alpha = alpha + h

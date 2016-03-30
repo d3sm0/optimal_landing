@@ -300,27 +300,29 @@ class simple_landing(base):
 if __name__ == "__main__":
 	from PyGMO import *
 	from random import random
+
+	# Use SNOPT if possible
 	algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-5)
+
+	# Alternatively the scipy SQP solver can be used
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
 	#algo.screen_output = True
 
-	# Pinpoint
-	#x0 = random() * (100. + 100.) - 100.
-	#y0 = random() * (2000. - 500.) + 500.
-	#m0 = random() * (12000. - 8000.) + 8000.
-	#vx0 = random() * (100. + 100.) - 10.
-	#vy0 = random() * (10. + 30.) - 30.
-	#state0 = [x0, y0, vx0, vy0, m0]
+	# Define the starting area (x0 will be irrelevanto if pinpoint is not True)
+	x0b =  [-100, 100]
+	y0b =  [500, 2000]
+	vx0b = [-100, 100]
+	vy0b = [-30, 10]
+	m0b =  [8000, 12000]
 
-	# Free
-	x0 = 0. #irrelevant
-	y0 = random() * (2000. - 500.) + 500.
-	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (100. + 100.) - 100.
-	vy0 = random() * (10. + 30.) - 30.
+	x0 = random() * (x0b[1] - x0b[0]) + x0b[0]
+	y0 = random() * (y0b[1] - y0b[0]) + y0b[0]
+	vx0 = random() * (vx0b[1] - vx0b[0]) + vx0b[0]
+	vy0 = random() * (vy0b[1] - vy0b[0]) + vy0b[0]
+	m0 = random() * (m0b[1] - m0b[0]) + m0b[0]
 	state0 = [x0, y0, vx0, vy0, m0]
 
-
+	# We start solving the Quadratic Control
 	print("Trying I.C. {}".format(state0)),
 	prob = simple_landing(state0 = state0, homotopy=0., pinpoint=False)
 	count = 1
@@ -345,10 +347,13 @@ if __name__ == "__main__":
 		print("Found QC solution!! Starting Homotopy")
 	print("from \t to\t step\t result")
 	
-	# Starting homotopy
+	# We proceed to solve by homotopy the mass optimal control
+	# Minimum and maximum step for the continuation
 	h_min = 1e-8
-	h_max = 0.5
+	h_max = 0.3
+	# Starting step
 	h = 0.1
+	
 	trial_alpha = h
 	alpha = 0
 	x = pop[0].cur_x

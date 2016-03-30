@@ -328,13 +328,17 @@ if __name__ == "__main__":
 
 
 	print("Trying I.C. {}".format(state0)),
-	probMOC = simple_landing(state0 = state0, objfun_type="QC", pinpoint=False)
+	prob = simple_landing(state0 = state0, objfun_type="QC", pinpoint=False)
 	count = 1
 	for i in range(1, 20):
-		print("Attempt # {}".format(i))
-		popMOC = population(probMOC,1)
-		popMOC = algo.evolve(popMOC)
-		if (probMOC.feasibility_x(popMOC[0].cur_x)):
+		print("Attempt # {}".format(i), end="")
+		pop = population(prob,1)
+		pop = algo.evolve(pop)
+		if (prob.feasibility_x(pop[0].cur_x)):
+			print(" - Success, violation norm is: {0:.4g}".format(norm(pop[0].cur_c)))
 			break
+		else:
+			print(" - Failed, violation norm is: {0:.4g}".format(norm(pop[0].cur_c)))
 
-	print(probMOC.feasibility_x(popMOC[0].cur_x))
+	print("PaGMO reports: ", end="")
+	print(prob.feasibility_x(pop[0].cur_x))

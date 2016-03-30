@@ -1,6 +1,7 @@
 """
-Implements an indirect method to solve the optimal control problem of a 
-varying mass spacecraft
+Implements an indirect method to solve the optimal control
+problem of a varying mass spacecraft. No attitude is present, 
+hence the name "simple"
 
 Dario Izzo 2016
 
@@ -353,7 +354,7 @@ if __name__ == "__main__":
 	h_max = 0.3
 	# Starting step
 	h = 0.1
-	
+
 	trial_alpha = h
 	alpha = 0
 	x = pop[0].cur_x

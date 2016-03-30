@@ -67,7 +67,7 @@ class rw_landing(base):
 		self.statet = self._non_dim(self.statet_input)
 
 		# We set the bounds (these will only be used to initialize the population)
-		self.set_bounds([-1] * 6 + [10. / self.T], [1] * 6 + [200. / self.T])
+		self.set_bounds([-5] * 6 + [10. / self.T], [5] * 6 + [200. / self.T])
 
 		# Activates a pinpoint landing
 		self.pinpoint = pinpoint
@@ -98,10 +98,10 @@ class rw_landing(base):
 		ceq[4] = (xf[-1][4] - self.statet[4] ) * 1000
 		
 		# Transversality condition on mass (free)
-		ceq[5] = xf[-1][11] * 10000
+		ceq[5] = (xf[-1][11] * 10000) 
 
 		# Free time problem, Hamiltonian must be 0
-		ceq[6] = self._hamiltonian(xf[-1]) * 10000
+		ceq[6] = (self._hamiltonian(xf[-1]) * 10000) 
 
 		return ceq
 
@@ -328,7 +328,7 @@ if __name__ == "__main__":
 	from random import random
 	algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-7)
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
-	algo.screen_output = True
+	algo.screen_output = False
 
 
 	vx0b = [-10, 10]
@@ -350,12 +350,11 @@ if __name__ == "__main__":
 	
 	print("IC: {}".format(state0))
 
-	for i in range(1, 2):
+	for i in range(1, 10):
 		# Start with attempts
 		print("Attempt # {}".format(i))
 		pop = population(prob, 1)
 		#pop.push_back([0,0,0,0,0,0,5.])
-		pop = algo.evolve(pop)
 		pop = algo.evolve(pop)
 
 		print("c: ",end="")
@@ -372,32 +371,40 @@ if __name__ == "__main__":
 		sys.exit(0)
 	else: 
 		print("Found QC solution!! Starting Homotopy")
-	print("from to:")
+
+
+
 	
-	# Starting homotopy
+	# We proceed to solve by homotopy the mass optimal control
+	print("from \t to\t step\t result")
+	# Minimum and maximum step for the continuation
 	h_min = 1e-4
 	h_max = 0.1
+	# Starting step
 	h = 0.1
+
+	algo = algorithm.snopt(50, opt_tol=1e-3, feas_tol=1e-7)
+
 	trial_alpha = h
-	alpha = 0
+	alpha = 0.
 	x = pop[0].cur_x
 
 	algo.screen_output = False
 	while True:
 		if trial_alpha > 1:
 			trial_alpha = 1.
-		print("{0:.5g}, {1:.5g}".format(alpha, trial_alpha), end="")
-		print("({})".format(h), end="")
+		print("{0:.5g}, \t {1:.5g} \t".format(alpha, trial_alpha), end="")
+		print("({0:.5g})\t".format(h), end="")
 		prob = rw_landing(state0 = state0, pinpoint=True, homotopy=trial_alpha)
 
 		pop = population(prob)
 		pop.push_back(x)
 		pop = algo.evolve(pop)
 
-		if not (prob.feasibility_x(pop[0].cur_x)):
+		if (norm(pop[0].cur_c) < 1e-2):
 			pop = algo.evolve(pop)
 			pop = algo.evolve(pop)
-			pop = algo.evolve(pop)
+
 
 		if (prob.feasibility_x(pop[0].cur_x)):
 			x = pop.champion.x
@@ -415,8 +422,5 @@ if __name__ == "__main__":
 			h = h * 0.5
 			if h < h_min:
 				print("\nContinuation step too small aborting :(")
-				dd
 				sys.exit(0)
 			trial_alpha = alpha + h
-
-

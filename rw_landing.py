@@ -12,7 +12,9 @@ from numpy.linalg import norm
 from math import sqrt, sin, cos, atan2, pi
 from scipy.integrate import odeint
 from numpy import linspace
+from numpy.linalg import norm
 from copy import deepcopy
+import sys
 
 
 class rw_landing(base):
@@ -24,7 +26,7 @@ class rw_landing(base):
 			c2 = 311. * 9.81,
 			c3 = 0.0698,
 			g = 1.6229,
-			objfun_type = "MOC",
+			homotopy = 0.,
 			pinpoint = False
 			):
 		"""
@@ -36,10 +38,11 @@ class rw_landing(base):
 		* c2: Isp g0 (m/s)
 		* c3: maximum rate for the attitude change (theta dot) [rad / s]
 		* g: planet gravity [m/s**2]
+		* homotopy: homotopy parameter, 0->QC, 1->MOC
 		* pinpoint: if True toggles the final constraint on the landing x
 		"""
 
-		super(rw_landing, self).__init__(7, 0, 1, 7, 0, 1e-8)
+		super(rw_landing, self).__init__(7, 0, 1, 7, 0, 1e-6)
 
 		# We store the raw inputs for convenience
 		self.state0_input = state0
@@ -64,14 +67,11 @@ class rw_landing(base):
 		self.statet = self._non_dim(self.statet_input)
 
 		# We set the bounds (these will only be used to initialize the population)
-		self.set_bounds([-1] * 6 + [10. / self.T], [1] * 6 + [200. / self.T])
-
-		# This switches between MOC and QC
-		self.objfun_type = objfun_type
+		self.set_bounds([-5] * 6 + [10. / self.T], [5] * 6 + [200. / self.T])
 
 		# Activates a pinpoint landing
 		self.pinpoint = pinpoint
-
+		self.homotopy = homotopy
 		self.alpha = 1./150.
 
 	def _objfun_impl(self, x):
@@ -98,10 +98,10 @@ class rw_landing(base):
 		ceq[4] = (xf[-1][4] - self.statet[4] ) * 1000
 		
 		# Transversality condition on mass (free)
-		ceq[5] = xf[-1][11] * 10000
+		ceq[5] = (xf[-1][11] * 10000) 
 
 		# Free time problem, Hamiltonian must be 0
-		ceq[6] = self._hamiltonian(xf[-1]) * 10000
+		ceq[6] = (self._hamiltonian(xf[-1]) * 10000) 
 
 		return ceq
 
@@ -129,10 +129,12 @@ class rw_landing(base):
 		c2 = self.c2
 		c3 = self.c3
 		u1, u2 = controls
-		if self.objfun_type=="MOC":
-			retval = c1 / c2 * u1 + self.alpha * c3**2 * u2**2
-		elif self.objfun_type=="QC": 
-			retval = c1**2 / c2 * u1**2 + self.alpha * c3**2 * u2**2
+		#if self.objfun_type=="MOC":
+		#	retval = c1 / c2 * u1 + self.alpha * c3**2 * u2**2
+		#elif self.objfun_type=="QC": 
+		#	retval = c1**2 / c2 * u1**2 + self.alpha * c3**2 * u2**2
+		retval = self.homotopy * c1 / c2 * u1 + (1 - self.homotopy) * c1**2 / c2 * u1**2 + self.alpha * c3**2 * u2**2
+
 		return retval
 
 	def _eom_state(self, state, controls):
@@ -183,14 +185,14 @@ class rw_landing(base):
 
 		# u1
 		lvdotitheta = lvx * sin(theta) + lvy * cos(theta)
-		if self.objfun_type=="MOC":
+		if self.homotopy==1:
 			S = 1. - lm + lvdotitheta * c2 / m
 			if S >= 0:
 				u1=0.
 			if S < 0:
 				u1=1.
-		elif self.objfun_type=="QC":
-			u1 = 1. / 2. / c1  * (lm - lvdotitheta * c2 / m)
+		else:
+			u1 = 1. / 2. / c1  * (lm - lvdotitheta * c2 / m - self.homotopy) / (1.-self.homotopy)
 			u1 = min(u1,1.) # NOTE: this can be increased to help convergence?
 			u1 = max(u1,0.)
 		# u2
@@ -211,12 +213,12 @@ class rw_landing(base):
 
 	def _shoot(self, x):
 		# Numerical Integration
-		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],100), rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],100), rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
 		return xf, info
 
 	def _simulate(self, x, tspan):
 		# Numerical Integration
-		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+		xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
 		return xf, info
 
 	def _non_dim(self, state):
@@ -324,47 +326,101 @@ class rw_landing(base):
 if __name__ == "__main__":
 	from PyGMO import *
 	from random import random
-	algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-9)
+	algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-7)
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
-	#algo.screen_output = True
+	algo.screen_output = False
+
+
+	vx0b = [-10, 10]
+	vy0b = [-30, 10]
+	x0b = [-100, 100]
+	y0b = [500, 2000]
 
 	# Pinpoint
-	x0 = random() * (100. + 100.) - 100.
-	y0 = random() * (2000. - 500.) + 500.
+	x0 = random() * (x0b[1] - x0b[0]) + x0b[0]
+	y0 = random() * (y0b[1] - y0b[0]) + y0b[0]
 	m0 = random() * (12000. - 8000.) + 8000.
-	vx0 = random() * (10. + 10.) - 10.
-	vy0 = random() * (10. + 30.) - 30.
-	state0 = [x0, y0, vx0, vy0, m0]
-
-	# Free
-	#x0 = 0. #irrelevant
-	#y0 = random() * (2000. - 500.) + 500.
-	#m0 = random() * (12000. - 8000.) + 8000.
-	#vx0 = random() * (100. + 100.) - 100.
-	#vy0 = random() * (10. + 30.) - 30.
-
+	vx0 = random() * (vx0b[1] - vx0b[0]) + vx0b[0]
+	vy0 = random() * (vy0b[1] - vy0b[0]) + vy0b[0]
 	theta0 = random() * (pi/20 + pi/20) - pi/20
+
 	state0 = [x0, y0, vx0, vy0, theta0, m0]
 
-	probMOC = rw_landing(state0 = state0, pinpoint=True, objfun_type="QC")
+	prob = rw_landing(state0 = state0, pinpoint=True, homotopy=0.)
 	
 	print("IC: {}".format(state0))
 
-	for i in range(1, 20):
+	for i in range(1, 10):
 		# Start with attempts
 		print("Attempt # {}".format(i))
-		popMOC = population(probMOC, 1)
-		#popMOC.push_back(ic)
-		popMOC = algo.evolve(popMOC)
+		pop = population(prob, 1)
+		#pop.push_back([0,0,0,0,0,0,5.])
+		pop = algo.evolve(pop)
 
 		print("c: ",end="")
-		print(["{0:.2g}".format(it) for it in popMOC[0].cur_c])
+		print(["{0:.2g}".format(it) for it in pop[0].cur_c])
 
 		print("x: ",end="")
-		print(["{0:.2g}".format(it) for it in popMOC[0].cur_x])
+		print(["{0:.2g}".format(it) for it in pop[0].cur_x])
 
-		if (probMOC.feasibility_x(popMOC[0].cur_x)):
+		if (prob.feasibility_x(pop[0].cur_x)):
 			break
 		
+	if not prob.feasibility_x(pop[0].cur_x):
+		print("No QC solution! Ending here :(")
+		sys.exit(0)
+	else: 
+		print("Found QC solution!! Starting Homotopy")
 
-	print(probMOC.feasibility_x(popMOC[0].cur_x))
+
+
+	
+	# We proceed to solve by homotopy the mass optimal control
+	print("from \t to\t step\t result")
+	# Minimum and maximum step for the continuation
+	h_min = 1e-4
+	h_max = 0.1
+	# Starting step
+	h = 0.1
+
+	algo = algorithm.snopt(50, opt_tol=1e-3, feas_tol=1e-7)
+
+	trial_alpha = h
+	alpha = 0.
+	x = pop[0].cur_x
+
+	algo.screen_output = False
+	while True:
+		if trial_alpha > 1:
+			trial_alpha = 1.
+		print("{0:.5g}, \t {1:.5g} \t".format(alpha, trial_alpha), end="")
+		print("({0:.5g})\t".format(h), end="")
+		prob = rw_landing(state0 = state0, pinpoint=True, homotopy=trial_alpha)
+
+		pop = population(prob)
+		pop.push_back(x)
+		pop = algo.evolve(pop)
+
+		if (norm(pop[0].cur_c) < 1e-2):
+			pop = algo.evolve(pop)
+			pop = algo.evolve(pop)
+
+
+		if (prob.feasibility_x(pop[0].cur_x)):
+			x = pop.champion.x
+			if trial_alpha == 1:
+				print(" Success")
+				break
+			print(" Success")
+			h = h * 2.
+			h = min(h, h_max)
+			alpha = trial_alpha
+			trial_alpha = trial_alpha + h
+		else:
+			print(" - Failed, ", end="")
+			print("norm c: {0:.4g}".format(norm(pop[0].cur_x)))
+			h = h * 0.5
+			if h < h_min:
+				print("\nContinuation step too small aborting :(")
+				sys.exit(0)
+			trial_alpha = alpha + h

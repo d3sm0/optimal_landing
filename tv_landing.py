@@ -41,7 +41,7 @@ class tv_landing(base):
 		* pinpoint: if True toggles the final constraint on the landing x
 		"""
 
-		super(tv_landing, self).__init__(8, 0, 1, 8, 0, 1e-5)
+		super(tv_landing, self).__init__(8, 0, 1, 8, 0, 1e-4)
 
 		# We store the raw inputs for convenience
 		self.state0_input = state0
@@ -337,7 +337,7 @@ if __name__ == "__main__":
 	from random import random
 	algo = algorithm.snopt(200, opt_tol=1e-5, feas_tol=1e-5)
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
-	algo.screen_output = False
+	algo.screen_output = True
 
 	vx0b = [-1, 1]
 	vy0b = [5, -40]
@@ -363,13 +363,18 @@ if __name__ == "__main__":
 	n_attempts = 1
 	for i in range(1, n_attempts + 1):
 		# Start with attempts
-		print("Attempt # {}".format(i))
+		print("Attempt # {}".format(i), end="")
 		pop = population(prob)
 		pop.push_back([0,0,0,-0.015,0,0,0,5])
 		pop = algo.evolve(pop)
 
+		# If close to feasible make another shot
+		if (not (prob.feasibility_x(pop[0].cur_x)) and norm(pop[0].cur_c) < 1e-2):
+			print(" - Refining ...", end="")
+			pop = algo.evolve(pop)
+
 		# Log constraints and chormosome
-		print("c: ",end="")
+		print("\nc: ",end="")
 		print(["{0:.2g}".format(it) for it in pop[0].cur_c])
 
 		print("x: ",end="")
@@ -378,7 +383,7 @@ if __name__ == "__main__":
 		# If succesfull proceed
 		if (prob.feasibility_x(pop[0].cur_x)):
 			break
-		
+
 	if not prob.feasibility_x(pop[0].cur_x):
 		print("No QC solution! Ending here :(")
 		sys.exit(0)

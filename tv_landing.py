@@ -95,7 +95,7 @@ class tv_landing(base):
 		ceq[1] = (xf[-1][1] - self.statet[1] ) * 1
 		ceq[2] = (xf[-1][2] - self.statet[2] ) * 1
 		ceq[3] = (xf[-1][3] - self.statet[3] ) * 1
-		ceq[4] = (xf[-1][4] - self.statet[4] ) / 100
+		ceq[4] = (xf[-1][4] - self.statet[4] ) * 1
 
 		
 		# Transversality condition on omega and mass (free)
@@ -337,28 +337,33 @@ if __name__ == "__main__":
 	from random import random
 	algo = algorithm.snopt(200, opt_tol=1e-5, feas_tol=1e-5)
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
-	algo.screen_output = True
+	algo.screen_output = False
 
+	x0b = [-1, 1]
+	y0b =  [500, 2000]
 	vx0b = [-1, 1]
 	vy0b = [5, -40]
-	x0b = [-1, 1]
+	m0b =  [8000, 12000]
 
 	# Thrust vectoring I.C.
 	x0 = random() * (x0b[1] - x0b[0]) + x0b[0]
-	y0 = random() * (2000. - 500.) + 500.
-	m0 = random() * (12000. - 8000.) + 8000.
+	y0 = random() * (y0b[1] - y0b[0]) + y0b[0]
 	vx0 = random() * (vx0b[1] - vx0b[0]) + vx0b[0]
 	vy0 = random() * (vy0b[1] - vy0b[0]) + vy0b[0]
-
+	m0 = random() * (m0b[1] - m0b[0]) + m0b[0]
 	theta0 = 0.
 	omega0 = 0.
+
 	state0 = [x0, y0, vx0, vy0, theta0, omega0, m0]
+
+	#state0 = [-0.9041722360456252, 902.0643120278692, -0.5324080623493679, -37.30312816291875, 0.0, 0.0, 9267.289288062231]
+	#x = (-0.0012656071950272502, 0.001687429072230602, -0.0039937730242, -0.010390431102788651, -0.0013309584439359463, -0.0015832737562745524, 0.015596775327686337, 3.937814293597751)
+
 
 	prob = tv_landing(state0 = state0, pinpoint=True, homotopy=0.)
 	
 	print("IC: {}".format(state0))
 	
-
 	# Attempting to solve the QC problem
 	n_attempts = 1
 	for i in range(1, n_attempts + 1):
@@ -366,12 +371,8 @@ if __name__ == "__main__":
 		print("Attempt # {}".format(i), end="")
 		pop = population(prob)
 		pop.push_back([0,0,0,-0.015,0,0,0,5])
+		#pop.push_back(x0)
 		pop = algo.evolve(pop)
-
-		# If close to feasible make another shot
-		if (not (prob.feasibility_x(pop[0].cur_x)) and norm(pop[0].cur_c) < 1e-2):
-			print(" - Refining ...", end="")
-			pop = algo.evolve(pop)
 
 		# Log constraints and chormosome
 		print("\nc: ",end="")
@@ -389,46 +390,51 @@ if __name__ == "__main__":
 		sys.exit(0)
 	else: 
 		print("Found QC solution!! Starting Homotopy")
-	print("from to:")
+		x = pop[0].cur_x
+		print("state0 = {}".format(state0))
+		print("x = {}".format(x))
 	
-	# Starting homotopy
-	h_min = 1e-8
-	h_max = 0.1
-	h = 0.1
+	#sys.exit(0)
+
+	# We proceed to solve by homotopy the mass optimal control
+	# Minimum and maximum step for the continuation
+	h_min = 1e-4
+	h_max = 0.2
+	# Starting step
+	h = 0.2
+
 	trial_alpha = h
 	alpha = 0
 	x = pop[0].cur_x
 
-	#algo.screen_output = False
+	algo = algorithm.scipy_slsqp(max_iter = 30,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
+	algo.screen_output = False
 	while True:
 		if trial_alpha > 1:
 			trial_alpha = 1.
-		print(alpha, trial_alpha, end="")
+		print("{0:.5g}, \t {1:.5g} \t".format(alpha, trial_alpha), end="")
+		print("({0:.5g})\t".format(h), end="")
 		prob = tv_landing(state0 = state0, pinpoint=True, homotopy=trial_alpha)
 
 		pop = population(prob)
 		pop.push_back(x)
 		pop = algo.evolve(pop)
-		pop = algo.evolve(pop)
+
 		if (prob.feasibility_x(pop[0].cur_x)):
-			x = pop.champion.x
+			x = pop[0].cur_x
 			if trial_alpha == 1:
 				print(" Success")
 				break
 			print(" Success")
-			h = h * 1.5
+			h = h * 2.
 			h = min(h, h_max)
 			alpha = trial_alpha
 			trial_alpha = trial_alpha + h
 		else:
-			print(" - Failed: ", end="")
-			print(["{0:.2g}".format(it) for it in pop[0].cur_c], end="")
-			print(["{0:.2g}".format(it) for it in pop[0].cur_x])
-			dd
+			print(" - Failed, ", end="")
+			print("norm c: {0:.4g}".format(norm(pop[0].cur_c)))
 			h = h * 0.5
 			if h < h_min:
 				print("\nContinuation step too small aborting :(")
 				sys.exit(0)
 			trial_alpha = alpha + h
-
-

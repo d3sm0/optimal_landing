@@ -388,7 +388,7 @@ if __name__ == "__main__":
 			trial_alpha = trial_alpha + h
 		else:
 			print(" - Failed, ", end="")
-			print("norm c: {0:.4g}".format(norm(pop[0].cur_x)))
+			print("norm c: {0:.4g}".format(norm(pop[0].cur_c)))
 			h = h * 0.5
 			if h < h_min:
 				print("\nContinuation step too small aborting :(")

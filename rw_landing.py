@@ -67,7 +67,7 @@ class rw_landing(base):
 		self.statet = self._non_dim(self.statet_input)
 
 		# We set the bounds (these will only be used to initialize the population)
-		self.set_bounds([-5] * 6 + [10. / self.T], [5] * 6 + [200. / self.T])
+		self.set_bounds([-1] * 6 + [10. / self.T], [1] * 6 + [200. / self.T])
 
 		# Activates a pinpoint landing
 		self.pinpoint = pinpoint
@@ -379,17 +379,20 @@ if __name__ == "__main__":
 	print("from \t to\t step\t result")
 	# Minimum and maximum step for the continuation
 	h_min = 1e-4
-	h_max = 0.1
+	h_max = 0.2
 	# Starting step
-	h = 0.1
+	h = 0.2
 
-	algo = algorithm.snopt(50, opt_tol=1e-3, feas_tol=1e-7)
+	#algo = algorithm.snopt(50, opt_tol=1e-3, feas_tol=1e-7)
 
 	trial_alpha = h
 	alpha = 0.
 	x = pop[0].cur_x
 
+
+	algo = algorithm.scipy_slsqp(max_iter = 30,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
 	algo.screen_output = False
+
 	while True:
 		if trial_alpha > 1:
 			trial_alpha = 1.
@@ -418,7 +421,7 @@ if __name__ == "__main__":
 			trial_alpha = trial_alpha + h
 		else:
 			print(" - Failed, ", end="")
-			print("norm c: {0:.4g}".format(norm(pop[0].cur_x)))
+			print("norm c: {0:.4g}".format(norm(pop[0].cur_c)))
 			h = h * 0.5
 			if h < h_min:
 				print("\nContinuation step too small aborting :(")

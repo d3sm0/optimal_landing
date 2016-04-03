@@ -26,7 +26,7 @@ class simple_landing(base):
             c2 = 311. * 9.81,
             g = 1.6229,
             homotopy = 0.,
-            pinpoint = False
+            pinpoint = True
             ):
         """
         USAGE: reachable(self, start, end, Isp, Tmax, mu):
@@ -39,7 +39,6 @@ class simple_landing(base):
         * homotopy: homotopy parameter, 0->QC, 1->MOC
         * pinpoint: if True toggles the final constraint on the landing x
         """
-
         super(simple_landing, self).__init__(6, 0, 1, 6, 0, 1e-4)
 
         # We store the raw inputs for convenience
@@ -311,8 +310,10 @@ class simple_landing(base):
         for line in full_state:
             res.append(self._dim_back(line[:7]))
             controls.append(self._pontryagin_minimum_principle(line))
-            u1.append(controls[0][0])
-            u2.append(atan2(controls[0][1], controls[0][2]))
+            u1.append(controls[-1][0])
+            u2.append(atan2(controls[-1][1], controls[-1][2]))
+        u1 = np.vstack(u1)
+        u2 = np.vstack(u2)
 
         tspan = [it * self.T for it in tspan]
 
@@ -327,7 +328,14 @@ class simple_landing(base):
             vy.append(state[3])
             m.append(state[4])
 
-        return np.vstack((tspan, x, y, vx, vy, m)), np.hstack((u1, u2))
+        tspan = np.vstack(tspan)
+        x = np.vstack(x)
+        y = np.vstack(y)
+        vx = np.vstack(vx)
+        vy = np.vstack(vy)
+        m = np.vstack(m)
+
+        return (np.hstack((tspan, x, y, vx, vy, m)), np.hstack((u1, u2)))
 
 
 if __name__ == "__main__":
@@ -335,7 +343,7 @@ if __name__ == "__main__":
     from random import random
 
     # Use SNOPT if possible
-    algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-5)
+    algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-7)
 
     # Alternatively the scipy SQP solver can be used
     #algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
@@ -357,7 +365,7 @@ if __name__ == "__main__":
 
     # We start solving the Quadratic Control
     print("Trying I.C. {}".format(state0)),
-    prob = simple_landing(state0 = state0, homotopy=0., pinpoint=False)
+    prob = simple_landing(state0 = state0, homotopy=0., pinpoint=True)
     count = 1
     for i in range(1, 20):
         print("Attempt # {}".format(i), end="")
@@ -397,7 +405,7 @@ if __name__ == "__main__":
             trial_alpha = 1.
         print("{0:.5g}, \t {1:.5g} \t".format(alpha, trial_alpha), end="")
         print("({0:.5g})\t".format(h), end="")
-        prob = simple_landing(state0 = state0, pinpoint=False, homotopy=trial_alpha)
+        prob = simple_landing(state0 = state0, pinpoint=True, homotopy=trial_alpha)
 
         pop = population(prob)
         pop.push_back(x)

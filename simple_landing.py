@@ -15,6 +15,7 @@ from numpy import linspace
 from copy import deepcopy
 import sys
 
+import numpy as np
 
 class simple_landing(base):
     def __init__(
@@ -235,7 +236,7 @@ class simple_landing(base):
         controls = list()
         ux = list(); uy=list()
         for line in full_state:
-            res.append(self._dim_back(line[:7]))
+            res.append(self._dim_back(line[:5]))
             controls.append(self._pontryagin_minimum_principle(line))
             ux.append(controls[-1][0]*controls[-1][1])
             uy.append(controls[-1][0]*controls[-1][2])
@@ -297,6 +298,47 @@ class simple_landing(base):
         s = s + "\tPinpoint?: " + str(self.pinpoint)
 
         return s
+
+
+
+    def produce_data(self, x, npoints):
+
+        # Producing the data
+        tspan = linspace(0, x[-1], 100)
+        full_state, info = self._simulate(x, tspan)
+        # Putting dimensions back
+        res = list()
+        controls = list()
+        u1 = list(); u2 = list()
+        for line in full_state:
+            res.append(self._dim_back(line[:5]))
+            controls.append(self._pontryagin_minimum_principle(line))
+            u1.append(controls[-1][0])
+            u2.append(atan2(controls[-1][1], controls[-1][2]))
+        u1 = np.vstack(u1)
+        u2 = np.vstack(u2)
+
+        tspan = [it * self.T for it in tspan]
+
+        x = list(); y=list()
+        vx = list(); vy = list()
+        m = list()
+
+        for state in res:
+            x.append(state[0])
+            y.append(state[1])
+            vx.append(state[2])
+            vy.append(state[3])
+            m.append(state[4])
+
+        tspan = np.vstack(tspan)
+        x = np.vstack(x)
+        y = np.vstack(y)
+        vx = np.vstack(vx)
+        vy = np.vstack(vy)
+        m = np.vstack(m)
+
+        return (np.hstack((tspan, x, y, vx, vy, m)), np.hstack((u1, u2)))
 
 if __name__ == "__main__":
     from PyGMO import *

@@ -26,7 +26,7 @@ def solve(problem, state0, homotopy=0, algo=None,  x=None, display=True):
 
     if not algo:
         # Use SNOPT if possible
-        algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-5)
+        algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-6)
 
         # Alternatively the scipy SQP solver can be used
         # algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
@@ -168,14 +168,19 @@ def generate_random_walks(problem, trajs_n, bounds, th_id=0, dir='data', walk_le
         os.makedirs(dir)
 
     while curr_trajs < trajs_n:
+
+        if os.path.isfile(dir + '/random_walk_' + str(th_id) + '_' + str(walk_id) +'.pic'):
+            ws = pickle.load(open(dir + '/random_walk_' + str(th_id) + '_' + str(walk_id) +'.pic','rb'))
+            walk_id +=1
+            curr_trajs += len(ws)
+            continue
+
         state0 = random_state(bounds)
 
         walk_length = min(walk_length, trajs_n-curr_trajs)
-        print(walk_length)
         walk_trajs = random_walk(problem, state0, bounds, walk_length= walk_length, algo=algo,
                                  state_step= state_step, h_min = h_min, h_max = h_max, h=h,
                                  walk_stop_when_fail=walk_stop_when_fail, display=display)
-        print(len(walk_trajs))
         if(len(walk_trajs) > 0):
              curr_trajs += len(walk_trajs)
              pickle.dump(walk_trajs, open(dir + '/random_walk_' + str(th_id) + '_' + str(walk_id) +'.pic','wb'))
@@ -201,17 +206,22 @@ def run_multithread(problem, n_trajs, n_threads, bounds, dir='data', walk_length
 
 if __name__ == "__main__":
 
-    from simple_landing import simple_landing as landing_problem
-#    from rw_landing_homotopy import rw_landing as landing_problem
-
     x0b = (-200, 200)
     y0b = (500, 2000)
     vx0b = (-30, 30)
     vy0b = (-30, 10)
     m0b = (8000, 12000)
     th0b = (- np.pi/20, np.pi/20)
-    initial_bounds = [x0b, y0b, vx0b, vy0b, m0b]
-    #initial_bounds = [x0b, y0b, vx0b, vy0b, th0b, m0b]
+
+    if len(sys.argv) != 4 or sys.argv[3] == 'simple':
+        from simple_landing import simple_landing as landing_problem
+        initial_bounds = [x0b, y0b, vx0b, vy0b, m0b]
+        filedir='simple'
+    elif sys.argv[3] == 'rw':
+        from rw_landing import rw_landing as landing_problem
+        vx0b = (-10, 10)
+        initial_bounds = [x0b, y0b, x0b, vy0b, th0b, m0b]
+        filedir='rw'
 
     trajs = int(sys.argv[1])
 
@@ -222,5 +232,5 @@ if __name__ == "__main__":
     # state = random_state(bounds)
     # sol = homotopy_path(landing_problem, state)
 
-    run_multithread(landing_problem, trajs, n_th, initial_bounds, 'data/simple', display=True)
+    run_multithread(landing_problem, trajs, n_th, initial_bounds, 'data/' + filedir, display=True)
 

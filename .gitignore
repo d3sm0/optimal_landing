@@ -1,5 +1,9 @@
 # Project specifics
 data/
+examples/data/
+examples/traj/
+examples/nets/
+.idea/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

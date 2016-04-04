@@ -407,7 +407,7 @@ if __name__ == "__main__":
 	alpha = 0
 	x = pop[0].cur_x
 
-	algo = algorithm.scipy_slsqp(max_iter = 30,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
+	algo = algorithm.scipy_slsqp(max_iter = 40,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
 	algo.screen_output = False
 	while True:
 		if trial_alpha > 1:

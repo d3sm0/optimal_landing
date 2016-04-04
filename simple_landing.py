@@ -39,7 +39,7 @@ class simple_landing(base):
 		* pinpoint: if True toggles the final constraint on the landing x
 		"""
 
-		super(simple_landing, self).__init__(6, 0, 1, 6, 0, 1e-4)
+		super(simple_landing, self).__init__(6, 0, 1, 6, 0, 1e-5)
 
 		# We store the raw inputs for convenience
 		self.state0_input = state0
@@ -84,14 +84,14 @@ class simple_landing(base):
 		# Final conditions
 		if self.pinpoint:
 			#Pinpoint landing x is fixed lx is free
-			ceq[0] = (xf[-1][0] - self.statet[0] ) ** 2
+			ceq[0] = (xf[-1][0] - self.statet[0] )
 		else:
 			#Transversality condition: x is free lx is 0
 			ceq[0] = xf[-1][5] ** 2
 
-		ceq[1] = (xf[-1][1] - self.statet[1] ) ** 2
-		ceq[2] = (xf[-1][2] - self.statet[2] ) ** 2
-		ceq[3] = (xf[-1][3] - self.statet[3] ) ** 2
+		ceq[1] = (xf[-1][1] - self.statet[1] )
+		ceq[2] = (xf[-1][2] - self.statet[2] )
+		ceq[3] = (xf[-1][3] - self.statet[3] )
 		
 		# Transversality condition on mass (free)
 		ceq[4] = xf[-1][9] ** 2
@@ -303,7 +303,7 @@ if __name__ == "__main__":
 	from random import random
 
 	# Use SNOPT if possible
-	algo = algorithm.snopt(200, opt_tol=1e-3, feas_tol=1e-5)
+	algo = algorithm.snopt(200, opt_tol=1e-5, feas_tol=1e-8)
 
 	# Alternatively the scipy SQP solver can be used
 	#algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
@@ -325,7 +325,7 @@ if __name__ == "__main__":
 
 	# We start solving the Quadratic Control
 	print("Trying I.C. {}".format(state0)),
-	prob = simple_landing(state0 = state0, homotopy=0., pinpoint=False)
+	prob = simple_landing(state0 = state0, homotopy=0., pinpoint=True)
 	count = 1
 	for i in range(1, 20):
 		print("Attempt # {}".format(i), end="")
@@ -365,7 +365,7 @@ if __name__ == "__main__":
 			trial_alpha = 1.
 		print("{0:.5g}, \t {1:.5g} \t".format(alpha, trial_alpha), end="")
 		print("({0:.5g})\t".format(h), end="")
-		prob = simple_landing(state0 = state0, pinpoint=False, homotopy=trial_alpha)
+		prob = simple_landing(state0 = state0, pinpoint=True, homotopy=trial_alpha)
 
 		pop = population(prob)
 		pop.push_back(x)

@@ -11,11 +11,10 @@ from PyGMO.problem._base import base
 from numpy.linalg import norm
 from math import sqrt, sin, cos, atan2, pi
 from scipy.integrate import odeint
-from numpy import linspace
+from numpy import linspace, vstack, hstack
 from numpy.linalg import norm
 from copy import deepcopy
 import sys
-
 
 class rw_landing(base):
     def __init__(
@@ -42,7 +41,7 @@ class rw_landing(base):
         * pinpoint: if True toggles the final constraint on the landing x
         """
 
-        super(rw_landing, self).__init__(7, 0, 1, 7, 0, 1e-6)
+        super(rw_landing, self).__init__(7, 0, 1, 7, 0, 1e-5)
 
         # We store the raw inputs for convenience
         self.state0_input = state0
@@ -323,15 +322,57 @@ class rw_landing(base):
 
         return s
 
+    def produce_data(self, x, npoints):
+
+        # Producing the data
+        tspan = linspace(0, x[-1], 100)
+        full_state, info = self._simulate(x, tspan)
+        # Putting dimensions back
+        res = list()
+        controls = list()
+        u1 = list(); u2 = list()
+        for line in full_state:
+            res.append(self._dim_back(line[:6]))
+            controls.append(self._pontryagin_minimum_principle(line))
+            u1.append(controls[-1][0])
+            u1.append(controls[-1][1])
+        u1 = vstack(u1)
+        u2 = vstack(u2)
+
+        tspan = [it * self.T for it in tspan]
+
+        x = list(); y=list()
+        vx = list(); vy = list()
+        m = list()
+
+        for state in res:
+            x.append(state[0])
+            y.append(state[1])
+            vx.append(state[2])
+            vy.append(state[3])
+            theta.append(state[4])
+            m.append(state[5])
+
+        tspan = vstack(tspan)
+        x = vstack(x)
+        y = vstack(y)
+        vx = vstack(vx)
+        vy = vstack(vy)
+        m = vstack(m)
+
+        return (hstack((tspan, x, y, vx, vy, theta, m)), hstack((u1, u2)))
+
+
+
 if __name__ == "__main__":
     from PyGMO import *
     from random import random
-    algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-7)
+    algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-6)
     #algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
     algo.screen_output = True
 
 
-    vx0b = [-10, 10]
+    vx0b = [-30, 30]
     vy0b = [-30, 10]
     x0b = [-100, 100]
     y0b = [500, 2000]

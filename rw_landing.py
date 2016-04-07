@@ -328,7 +328,7 @@ if __name__ == "__main__":
     from random import random
     algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-7)
     #algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
-    algo.screen_output = False
+    algo.screen_output = True
 
 
     vx0b = [-10, 10]

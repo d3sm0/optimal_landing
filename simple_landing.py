@@ -303,7 +303,7 @@ if __name__ == "__main__":
     from random import random
 
     # Use SNOPT if possible
-    algo = algorithm.snopt(200, opt_tol=1e-5, feas_tol=1e-8)
+    algo = algorithm.snopt(200, opt_tol=1e-5, feas_tol=1e-6)
 
     # Alternatively the scipy SQP solver can be used
     #algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)

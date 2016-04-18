@@ -335,7 +335,7 @@ class rw_landing(base):
             res.append(self._dim_back(line[:6]))
             controls.append(self._pontryagin_minimum_principle(line))
             u1.append(controls[-1][0])
-            u1.append(controls[-1][1])
+            u2.append(controls[-1][1])
         u1 = vstack(u1)
         u2 = vstack(u2)
 
@@ -343,6 +343,7 @@ class rw_landing(base):
 
         x = list(); y=list()
         vx = list(); vy = list()
+        theta = list()
         m = list()
 
         for state in res:
@@ -358,6 +359,7 @@ class rw_landing(base):
         y = vstack(y)
         vx = vstack(vx)
         vy = vstack(vy)
+        theta =vstack(theta)
         m = vstack(m)
 
         return (hstack((tspan, x, y, vx, vy, theta, m)), hstack((u1, u2)))
@@ -367,7 +369,7 @@ class rw_landing(base):
 if __name__ == "__main__":
     from PyGMO import *
     from random import random
-    algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-6)
+    algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-6,   screen_output=True)
     #algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
     algo.screen_output = False
 
@@ -386,7 +388,7 @@ if __name__ == "__main__":
     theta0 = random() * (pi/20 + pi/20) - pi/20
 
     state0 = [x0, y0, vx0, vy0, theta0, m0]
-
+    print('State: ', state0)
     prob = rw_landing(state0 = state0, pinpoint=True, homotopy=0.)
     
     print("IC: {}".format(state0))
@@ -397,7 +399,7 @@ if __name__ == "__main__":
         pop = population(prob, 1)
         #pop.push_back([0,0,0,0,0,0,5.])
         pop = algo.evolve(pop)
-
+        print(algo)
         print("c: ",end="")
         print(["{0:.2g}".format(it) for it in pop[0].cur_c])
 

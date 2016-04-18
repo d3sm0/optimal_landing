@@ -24,6 +24,13 @@ from PyGMO import algorithm, population
 
 def solve(problem, state0, homotopy=0, algo=None,  x=None, display=True):
 
+
+    print('state: ', state0)
+    print('homot: ', homotopy)
+    print('algo : ', algo)
+    print('algo : ', algo.get_name())
+    print('x    : ', x)
+    
     if not algo:
         # Use SNOPT if possible
         algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-6)
@@ -32,6 +39,7 @@ def solve(problem, state0, homotopy=0, algo=None,  x=None, display=True):
         # algo = algorithm.scipy_slsqp(max_iter = 1000,acc = 1E-8,epsilon = 1.49e-08, screen_output = True)
         # algo.screen_output = True
 
+
     prob = problem(state0=state0, homotopy=homotopy, pinpoint=True)
     if x is None:
         pop = population(prob, 1)
@@ -39,14 +47,17 @@ def solve(problem, state0, homotopy=0, algo=None,  x=None, display=True):
         pop = population(prob)
         pop.push_back(x)
 
+
     pop = algo.evolve(pop)
-    x = pop.champion.x
+    x = pop[0].cur_x
+
     feasible = prob.feasibility_x(x)
 
     if not feasible and (norm(x) < 1e-2):
         pop = algo.evolve(pop)
         pop = algo.evolve(pop)
-        x = pop.champion.x
+#        x = pop.champion.x
+        x = pop[0].cur_x        
         feasible = prob.feasibility_x(x)
 
     if display:
@@ -55,8 +66,7 @@ def solve(problem, state0, homotopy=0, algo=None,  x=None, display=True):
     return {'x': pop.champion.x, 'prob': prob, 'feasible': feasible}
 
 
-def homotopy_path(problem, state0, algo=None, start=(0, None), h_min=1e-8, h_max=0.5, h=0.5, display=True):
-
+def homotopy_path(problem, state0, algo=None, start=(0, None), h_min=1e-4, h_max=0.5, h=0.5, display=True):
 
     sol = solve(problem, state0, start[0], algo, x=start[1], display=display)
     if not sol['feasible']:
@@ -105,7 +115,7 @@ def random_state(ranges):
 
 
 def random_walk(problem, state0, bounds, walk_length=300, algo=None, walk_stop_when_fail=False, initial_x = 'homotopy',
-                state_step=0.02, h_min=1e-8, h_max=0.5, h=0.5, display=True):
+                state_step=0.02, h_min=1e-4, h_max=0.5, h=0.5, display=True, ini_trials=10):
     '''
 
     :param problem:
@@ -120,11 +130,25 @@ def random_walk(problem, state0, bounds, walk_length=300, algo=None, walk_stop_w
     walk_trajs = []
     step_ranges = [(b[1]-b[0])*state_step for b in bounds]
 
-    if initial_x is 'homotopy':
-        sol = homotopy_path(problem, state0, algo=None, h_min=h_min, h_max=h_max, h=h, display=display)
+    x = None
+    if isinstance(initial_x,list) and not isinstance(initial_x,str):
+        for i in range(ini_trials):
+            sol = solve(problem, state0, algo=initial_x[0], display=display)
+            if sol['feasible']:
+                break
 
-    if initial_x is None:
-        sol = solve(problem, state0, 1, algo=None, display=display)
+        if not sol['feasible']:
+            if display:
+               print('\t> The random walk could not be started')
+            return walk_trajs
+
+        initial_x = initial_x[1]
+        x = sol['x']
+
+    if initial_x is 'homotopy':
+        sol = homotopy_path(problem, state0, start=(0,x), algo=algo, h_min=h_min, h_max=h_max, h=h, display=display)
+    elif initial_x is None:
+        sol = solve(problem, state0, 1, x=x, algo=algo, display=display)
 
 
     if not sol['feasible']:
@@ -159,8 +183,8 @@ def random_walk(problem, state0, bounds, walk_length=300, algo=None, walk_stop_w
 
 
 def generate_random_walks(problem, trajs_n, bounds, th_id=0, dir='data', walk_length=300, algo=None,
-                          state_step=0.02, h_min=1e-8, h_max=0.5, h=0.5, walk_stop_when_fail=False, 
-                          display=True):
+                          state_step=0.02, h_min=1e-4, h_max=0.5, h=0.5, walk_stop_when_fail=False, 
+                          display=True, initial_random_walk='homotopy'):
 
     curr_trajs = 0
     walk_id = 0
@@ -180,23 +204,24 @@ def generate_random_walks(problem, trajs_n, bounds, th_id=0, dir='data', walk_le
         walk_length = min(walk_length, trajs_n-curr_trajs)
         walk_trajs = random_walk(problem, state0, bounds, walk_length= walk_length, algo=algo,
                                  state_step= state_step, h_min = h_min, h_max = h_max, h=h,
-                                 walk_stop_when_fail=walk_stop_when_fail, display=display)
+                                 walk_stop_when_fail=walk_stop_when_fail, display=display, initial_x=initial_random_walk)
         if(len(walk_trajs) > 0):
              curr_trajs += len(walk_trajs)
              pickle.dump(walk_trajs, open(dir + '/random_walk_' + str(th_id) + '_' + str(walk_id) +'.pic','wb'))
              walk_id += 1
 
 
-def run_multithread(problem, n_trajs, n_threads, bounds, dir='data', walk_length=300, algo=None,
-                          state_step=0.02, h_min=1e-8, h_max=0.5, h=0.5, walk_stop_when_fail=False,
-                          display=True):
+def run_multithread(problem, n_trajs, n_threads, bounds, dir='data', walk_length=300,
+                          state_step=0.02, h_min=1e-4, h_max=0.5, h=0.5, walk_stop_when_fail=False,
+                          display=True, initial_random_walk='homotopy', algo=None):
 
     samples_per_thread = n_trajs/n_threads
 
     ps = []
     for i in range(n_threads):
         p = Process(target=generate_random_walks, args=(problem, samples_per_thread, bounds, i,
-                dir,walk_length,algo, state_step, h_min, h_max, h, walk_stop_when_fail, display))
+                dir,walk_length,algo, state_step, h_min, h_max, h, walk_stop_when_fail, display,
+                initial_random_walk))
         p.start()
         ps.append(p)
 
@@ -220,7 +245,7 @@ if __name__ == "__main__":
     elif sys.argv[3] == 'rw':
         from rw_landing import rw_landing as landing_problem
         vx0b = (-10, 10)
-        initial_bounds = [x0b, y0b, x0b, vy0b, th0b, m0b]
+        initial_bounds = [x0b, y0b, vx0b, vy0b, th0b, m0b]
         filedir='rw'
 
     trajs = int(sys.argv[1])
@@ -229,8 +254,13 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         n_th = int(sys.argv[2])
 
-    # state = random_state(bounds)
-    # sol = homotopy_path(landing_problem, state)
+    screen_output = False
+    snopt_algo = algorithm.snopt(400, opt_tol=1e-3, feas_tol=1e-6,   screen_output=screen_output)
+    sci_algo = algorithm.scipy_slsqp(max_iter = 30,acc = 1E-8,epsilon = 1.49e-08, screen_output = screen_output)
 
-    run_multithread(landing_problem, trajs, n_th, initial_bounds, 'data/' + filedir, display=True)
+    if len(sys.argv) != 4 or sys.argv[3] == 'simple':
+        run_multithread(landing_problem, trajs, n_th, initial_bounds, 'data/' + filedir, display=True)
+    elif sys.argv[3] == 'rw':
+        run_multithread(landing_problem, trajs, n_th, initial_bounds, 'data/' + filedir, display=True, 
+                        initial_random_walk=[snopt_algo,'homotopy'], algo=sci_algo, h_max=0.1, h=0.1)
 

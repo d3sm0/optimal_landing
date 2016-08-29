@@ -67,3 +67,6 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+# Temporal files
+*~

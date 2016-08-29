@@ -142,7 +142,7 @@ def vis_trajectory(traj, show_ground=False, angle_markers=False, x_lbl='x', y_lb
         marker_lenght = 0.5*scale
         angle = traj[angle_lbl]
 
-        for i in range(len(x)):
+        for i in range(0,len(x),int(len(x)*1.0/angle_markers)):
             a = angle[i]
 
             c = (x[i], z[i])

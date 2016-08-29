@@ -2,7 +2,6 @@ import pickle
 import numpy as np
 import theano
 import theano.tensor as tensor
-import lasagne
 from lasagne import layers, objectives, nonlinearities, updates
 try:
     from tqdm import tqdm
@@ -28,8 +27,8 @@ DTHETA = 1
 control_names = ['thrust', 'dtheta']
 
 
-def get_name(model, netfolder='nets'):
-    name = netfolder + '/'
+def get_name(model):
+    name = 'nets/'
 
     name += model['data'] + '/'
     name += str(model['control']) + '/'
@@ -125,13 +124,7 @@ def get_network(model):
     prev_layer = network
 
     for l in range(model['nlayers']):
-        W= None
-        if model['hidden_nonlinearity'] == 'ReLu':
-            W = lasagne.init.GlorotUniform('relu')
-        else:
-            W = lasagne.init.GlorotUniform(1)
-            
-        fc = layers.DenseLayer(prev_layer, model['units'], nonlinearity=nonlin, W=W)
+        fc = layers.DenseLayer(prev_layer, model['units'], nonlinearity=nonlin)
         if model['dropout']:
             fc = layers.DropoutLayer(fc, 0.5)
         prev_layer = fc
@@ -143,7 +136,7 @@ def get_network(model):
 
     predictions = layers.get_output(output_layer)
 
-    if model['output_mode'] != OUTPUT_LOG:
+    if model['output_mode'] == OUTPUT_BOUNDED:
         (minth, maxth) = model['maxmin'][model['control']]
         maxt = theano.shared(np.ones((model['batch_size'], 1)) * maxth)
         mint = theano.shared(np.ones((model['batch_size'], 1)) * minth)
@@ -152,27 +145,20 @@ def get_network(model):
         predictions = tensor.max(tensor.concatenate([mint, predictions], axis=1), axis=1)
         predictions = tensor.reshape(predictions, (model['batch_size'], 1))
 
-    if model['output_mode'] == OUTPUT_NO:
-        prediction_unboun = layers.get_output(output_layer)
-        loss = objectives.squared_error(prediction_unboun, targets_var)
-    else:
-        loss = objectives.squared_error(predictions, targets_var)
-
+    loss = objectives.squared_error(predictions, targets_var)
     loss = objectives.aggregate(loss, mode='mean')
 
     params = layers.get_all_params(output_layer)
-#    test_prediction = layers.get_output(output_layer, deterministic=True)  #fix for dropout
-    test_loss = objectives.squared_error(predictions,  targets_var)
+
+    test_prediction = layers.get_output(output_layer, deterministic=True)
+    test_loss = objectives.squared_error(test_prediction,  targets_var)
     test_loss = test_loss.mean()
 
-    if model['hidden_nonlinearity'] == 'ReLu':
-        model['lr'] *= 0.5
     updates_sgd = updates.sgd(loss, params, learning_rate=model['lr'])
     ups = updates.apply_momentum(updates_sgd, params, momentum=0.9)
 
     train_fn = theano.function([input_data, targets_var], loss, updates=ups)
     pred_fn = theano.function([input_data], predictions)
-#    pred_fn = theano.function([input_data], prediction_unboun)
     val_fn = theano.function([input_data, targets_var], test_loss)
 
     return {'train': train_fn, 'eval': val_fn, 'pred': pred_fn, 'layers': output_layer}
@@ -285,10 +271,10 @@ def load_model(modelfile):
     return pickle.load(open(modelfile, 'rb'))
 
 
-def load_network(model, base_dir='./', netfolder='nets'):
+def load_network(model, base_dir='./'):
 
     network = get_network(model)
-    load_network_weights(network['layers'], base_dir+get_name(model, netfolder))
+    load_network_weights(network['layers'], base_dir+get_name(model))
     return network
     
     
@@ -314,8 +300,6 @@ def train(model):
 
     print('========================')
     print('Loading data...')
-    print('traj/' + model['data'] + '.pic')
-
     [x_train, y_train, x_test, y_test, idx_train] = pickle.load(open('traj/' + model['data'] + '.pic', 'rb'))
 
     data = {'X_train': x_train,
@@ -345,68 +329,32 @@ def train(model):
     model['epochs_completed'] = 0
     minErr = np.Inf
     minEpoch = 0
-    tmp_nns = []
-    print(np.min(data['Y_train']))
-    print(np.max(data['Y_train']))
-    print(np.any(np.isnan(data['Y_train'])))
     try:
         for epoch in range(model['epochs']):
             epoch_loss = []
             for i in tqdm(range(int(y_train.shape[0]/model['batch_size'])), 'Training, epoch ' + str(epoch), leave=True):
                 xt, yt = load_minibatch(data['X_train'], data['Y_train'], i, model['batch_size'], idx_train)
                 yt = yt.take([take_control], 1)
-                pred = network['pred'](xt)
-                if  np.isnan(pred[0]) or np.any(np.isnan(pred)) or                                  np.any(np.isnan(lasagne.layers.get_all_param_values(network['layers'])[0])):
-                  print(i)
-                  print(pred)
-                  print(loss)
-                  print(lasagne.layers.get_all_param_values(network['layers']))
-                  print(xt,yt)
-                  break
                 loss = network['train'](xt, yt)
                 epoch_loss.append(loss)
-
-            epoch_loss = []
-            for i in tqdm(range(int(y_train.shape[0]/model['batch_size'])), 'Training, epoch ' + str(epoch), leave=True):
-                xt, yt = load_minibatch(data['X_train'], data['Y_train'], i, model['batch_size'], idx_train)
-                yt = yt.take([take_control], 1)
-                loss = network['eval'](xt, yt)
-                epoch_loss.append(loss)
-
             epoch_loss = np.mean(epoch_loss)
 
             save_network(network['layers'], get_name(model))
             model['epochs_completed'] += 1
             print('epoch {0}, train loss: {1}'.format(epoch, epoch_loss))
-            yt = y_test.take([take_control],1)
-            print(yt.shape)
-
-            loss = []
-            for i in tqdm(range(int(data['Y_test'].shape[0]/model['batch_size'])), 'Training, epoch ' + str(epoch), leave=True):
-                xt, yt = load_minibatch(data['X_test'], data['Y_test'], i, model['batch_size'], range(data['Y_test'].shape[0]))
-                yt = yt.take([take_control], 1)
-                l = network['eval'](xt, yt)
-                loss.append(l)
-
-            loss = np.mean(loss)
-
-
-
+            yt = y_test.take([take_control], 1)
+            loss = network['eval'](data['X_test'], yt)
             print('epoch {0}, test loss: {1}'.format(epoch, loss))
             model['test_loss'] = float(loss)
             if loss < minErr:
                 minErr = loss
                 minEpoch = epoch
-            if epoch  - minEpoch > 5 and epoch>15:
+            if epoch - minEpoch > 5:
                 print("Not learning, stopped")
                 break
             pickle.dump(model, open(directory + '/' + os.path.basename(get_name(model)).split('.')[0] + '.model', 'wb'))
-            params = layers.get_all_param_values(network['layers'])
-            tmp_nns.append((epoch, epoch_loss,  loss, params))
             json.dump(model, open(directory + '/' + os.path.basename(get_name(model)).split('.')[0] + '.modeltxt', 'w'))
-            pickle.dump(tmp_nns, open(directory + '/' + os.path.basename(get_name(model)).split('.')[0] 
-                        + '.tmp_nns', 'wb'))
-    
+
     except KeyboardInterrupt:
         print('Training stopped')
         pass

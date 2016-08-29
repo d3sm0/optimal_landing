@@ -11,22 +11,23 @@ from PyGMO.problem._base import base
 from numpy.linalg import norm
 from math import sqrt, sin, cos, atan2, pi
 from scipy.integrate import odeint
-from numpy import linspace
+from numpy import linspace, vstack, hstack
 from copy import deepcopy
 import sys
-
+import numpy as np
 
 class tv_landing(base):
     def __init__(
             self,
             state0 = [0., 1000., 20., -5., 0., 0., 10000.],
             statet = [0., 0., 0., 0., 0., 0., 9758.695805],
-            c1 = 44000.,
+            c1 = 5886000.*0.3,
             c2 = 311. * 9.81,
             c3 = 300.,
-            g = 1.6229,
+            g = 9.81,
             homotopy = 0.,
-            pinpoint = False
+            pinpoint = False,
+            normas = 80000.
             ):
         """
         USAGE: tv_landing(self, start, end, Isp, Tmax, mu):
@@ -41,32 +42,34 @@ class tv_landing(base):
         * pinpoint: if True toggles the final constraint on the landing x
         """
 
-        super(tv_landing, self).__init__(8, 0, 1, 8, 0, 1e-4)
-
+        super(tv_landing, self).__init__(8, 0, 1, 8, 0, 1e-3)
         # We store the raw inputs for convenience
         self.state0_input = state0
         self.statet_input = statet
 
-        # We define the non dimensional units (will use these from here on)
+        # We define t   he non dimensional units (will use these from here on)
         self.R = 1000.
         self.V = 100.
-        self.M = 10000.
+        self.M = normas
+        
         self.A = (self.V * self.V) / self.R
         self.T = self.R / self.V
         self.F = self.M * self.A
-
+        self.RAD  = 1
+        
         # We store the parameters
         self.c1 = c1 / self.F
         self.c2 = c2 / self.V
         self.c3 = c3 / self.R
         self.g = g / self.A
-
+      
+        print(self.c1)
         # We compute the initial and final state in the new units
         self.state0 = self._non_dim(self.state0_input)
         self.statet = self._non_dim(self.statet_input)
-
+        
         # We set the bounds (these will only be used to initialize the population)
-        self.set_bounds([-1] * 7 + [1. / self.T], [1] * 7 + [200. / self.T])
+        self.set_bounds([-1] * 7 + [1. / self.T], [1] * 7 + [100. / self.T])
 
         # Activates a pinpoint landing
         self.pinpoint = pinpoint
@@ -104,7 +107,6 @@ class tv_landing(base):
 
         # Free time problem, Hamiltonian must be 0
         ceq[7] = self._hamiltonian(xf[-1]) * 1
-
         return ceq
 
     def _hamiltonian(self, full_state):
@@ -131,7 +133,9 @@ class tv_landing(base):
         c2 = self.c2
         c3 = self.c3
         u, ut = controls
-        retval = self.homotopy * c1 / c2 * u + (1 - self.homotopy) * c1**2 / c2 * u**2
+        retval = self.homotopy * c1/c2  * u + (1 - self.homotopy) * c1**2 / c2 *  u**2 
+### !!       retval = self.homotopy * c1*c1 / c2  * u + (1 - self.homotopy) * c1**2 / c2 *  
+### u**2
         return retval
 
     def _eom_state(self, state, controls):
@@ -194,6 +198,7 @@ class tv_landing(base):
         ut[1] = - lauxy / laux
 
         # u
+        u = 0
         if self.homotopy==1:
             S = 1. - lm - laux * c2 / m
             if S >= 0:
@@ -201,7 +206,10 @@ class tv_landing(base):
             if S < 0:
                 u=1.
         else:
-            u = 1. / 2. / c1 / (1.-self.homotopy) * (lm + laux * c2 / m - self.homotopy) 
+            
+            u = 1. / 2. / c1 / (1.-self.homotopy) * (lm + laux * c2 / m - self.homotopy)
+#            u = 1. / 2. / c1 / (1.-self.homotopy) * (lm + laux * c2 / m - self.homotopy) 
+#            u = 1. / 2. / c1 / (1.-self.homotopy) * (lm + laux * c2 / m - self.homotopy) 
             u = min(u,1.) # NOTE: this can be increased to help convergence?
             u = max(u,0.)
         return u, ut
@@ -218,12 +226,17 @@ class tv_landing(base):
 
     def _shoot(self, x):
         # Numerical Integration
-        xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],100), rtol=1e-13, atol=1e-13, full_output=1, mxstep=2000)
+        xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), linspace(0, x[-1],1000), rtol=1e-5, atol=1e-5, 
+            full_output=1, 
+            mxstep=5000, hmax=0.01, hmin=1e-12, printmessg=False)
         return xf, info
 
     def _simulate(self, x, tspan):
         # Numerical Integration
-        xf, info = odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-12, atol=1e-12, full_output=1, mxstep=2000)
+        print('simulate')
+        xf= odeint(lambda a,b: self._eom(a,b), self.state0 + list(x[:-1]), tspan, rtol=1e-6, atol=1e-6, full_output=0, 
+            mxstep=5000,hmax=0.01, hmin=1e-8, printmessg=False)
+        info = []
         return xf, info
 
     def _non_dim(self, state):
@@ -232,8 +245,8 @@ class tv_landing(base):
         xnd[1] /= self.R
         xnd[2] /= self.V
         xnd[3] /= self.V
-        xnd[4] /= 1.
-        xnd[5] *= self.T
+        xnd[4] /= self.RAD
+        xnd[5] *= (self.RAD*self.T)
         xnd[6] /= self.M
         return xnd
 
@@ -332,6 +345,52 @@ class tv_landing(base):
 
         return s
 
+
+    def produce_data(self, x, npoints):
+
+        # Producing the data
+        tspan = linspace(0, x[-1], npoints)
+        full_state, info = self._simulate(x, tspan)
+        # Putting dimensions back
+        res = list()
+        controls = list()
+        u1 = list(); u2 = list()
+        for line in full_state:
+            res.append(self._dim_back(line[:7]))
+            controls.append(self._pontryagin_minimum_principle(line))
+            u1.append(controls[-1][0])
+            u2.append(controls[-1][1])
+        u1 = vstack(u1)
+        u2 = vstack(u2)
+
+        tspan = [it * self.T for it in tspan]
+
+        x = list(); y=list()
+        vx = list(); vy = list()
+        theta = list(); omega = list()
+        m = list()
+
+        for state in res:
+            x.append(state[0])
+            y.append(state[1])
+            vx.append(state[2])
+            vy.append(state[3])
+            theta.append(state[4])
+            omega.append(state[5])
+            m.append(state[6])
+
+        tspan = vstack(tspan)
+        x = vstack(x)
+        y = vstack(y)
+        vx = vstack(vx)
+        vy = vstack(vy)
+        theta =vstack(theta)
+        omega = vstack(omega)
+        m = vstack(m)
+        return (hstack((tspan, x, y, vx, vy, theta, omega, m)), hstack((u1, u2)))
+
+
+
 if __name__ == "__main__":
     from PyGMO import *
     from random import random
@@ -346,28 +405,58 @@ if __name__ == "__main__":
     vy0b = [5, -40]
     m0b =  [8000, 12000]
 
-    x0 = random() * (x0b[1] - x0b[0]) + x0b[0]
-    y0 = random() * (y0b[1] - y0b[0]) + y0b[0]
-    vx0 = random() * (vx0b[1] - vx0b[0]) + vx0b[0]
-    vy0 = random() * (vy0b[1] - vy0b[0]) + vy0b[0]
-    m0 = random() * (m0b[1] - m0b[0]) + m0b[0]
-    theta0 = 0.
-    omega0 = 0.
-
-    state0 = [x0, y0, vx0, vy0, theta0, omega0, m0]
 
     # Problem definition
-    prob = tv_landing(state0 = state0, pinpoint=True, homotopy=0.)
-
-    print("IC: {}".format(state0))
     
     # Attempting to solve the QC problem
-    n_attempts = 1
+    n_attempts = 50
     for i in range(1, n_attempts + 1):
-        # Start with attempts
+        x0 = random() * (x0b[1] - x0b[0]) + x0b[0]
+        y0 = random() * (y0b[1] - y0b[0]) + y0b[0]
+        vx0 = random() * (vx0b[1] - vx0b[0]) + vx0b[0]
+        vy0 = random() * (vy0b[1] - vy0b[0]) + vy0b[0]
+        m0 = random() * (m0b[1] - m0b[0]) + m0b[0]
+        theta0 = 0.
+        omega0 = 0.
+
+        state0 = [x0, y0, vx0, vy0, theta0, omega0, m0]
+        
+        state0 = [-1.83609715e+00,   
+              1.44559645e+03,
+                 6.02978623e-01,  -2.16906878e+02,   4.25482258e-02,
+                         -2.16631406e-02,   7.91244923e+04]
+                         
+        
+        
+        prob = tv_landing(state0 = state0, pinpoint=True, 
+            homotopy=0.)
+
+   
+        print("IC: {}".format(state0))
+
+      # Start with attempts
         print("Attempt # {}".format(i), end="")
         pop = population(prob)
-        pop.push_back([0,0,0,-0.015,0,0,0,5])
+        x = (2.7725139411905354e-10,
+             0.005724760124809018,
+             2.950847498026487e-10,
+             -0.12013195562429928,
+             2.996361244192239e-10,
+             1.33450685205765e-10,
+             0.3936895621144142,
+             1.8687501772723236)
+
+        x=(-0.03190509234642118,
+         -0.04496197939657747,
+          -0.03769311123455317,
+           -0.1650460632906548,
+            -0.05846757985444901,
+             -0.019228175701329647,
+              0.5218293678234064,
+               1.490012228926392)
+
+
+        pop.push_back(x)
         #pop.push_back(x0)
         pop = algo.evolve(pop)
 
@@ -395,7 +484,7 @@ if __name__ == "__main__":
 
     # We proceed to solve by homotopy the mass optimal control
     # Minimum and maximum step for the continuation
-    h_min = 1e-4
+    h_min = 1e-8
     h_max = 0.2
     # Starting step
     h = 0.2
@@ -435,4 +524,3 @@ if __name__ == "__main__":
                 print("\nContinuation step too small aborting :(")
                 sys.exit(0)
             trial_alpha = alpha + h
-

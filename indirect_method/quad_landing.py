@@ -11,7 +11,7 @@ from PyGMO.problem._base import base
 from numpy.linalg import norm
 from math import sqrt, sin, cos, atan2, pi
 from scipy.integrate import odeint
-from numpy import linspace, vstack, hstack
+from numpy import linspace, vstack, hstack, isnan
 from numpy.linalg import norm
 from copy import deepcopy
 import sys
@@ -22,7 +22,7 @@ class rw_landing(base):
             state0 = [0., 1000., 20., -5., 0., 10000.],
             statet = [0., 0., 0., 0., 0., 9758.695805],
             c1 = 44000.,
-            c2 = 311. * 9.81,
+            c2 = 100000,
             c3 = 0.0698,
             g = 1.6229,
             homotopy = 0.,
@@ -66,7 +66,8 @@ class rw_landing(base):
         self.statet = self._non_dim(self.statet_input)
 
         # We set the bounds (these will only be used to initialize the population)
-        self.set_bounds([-1] * 6 + [10. / self.T], [1] * 6 + [200. / self.T])
+        self.set_bounds([-1] * 6 + [0.0001], [1] * 6 + [200. / self.T])
+#        self.set_bounds([-1] * 6 + [10. / self.T], [1] * 6 + [200. / self.T])
 
         # Activates a pinpoint landing
         self.pinpoint = pinpoint
@@ -186,6 +187,8 @@ class rw_landing(base):
         lvdotitheta = lvx * sin(theta) + lvy * cos(theta)
         if self.homotopy==1:
             S = 1. - lm + lvdotitheta * c2 / m
+            if(isnan(S)):
+                print(S, c2, m, lm, lvdotitheta )
             if S >= 0:
                 u1=0.
             if S < 0:
@@ -254,6 +257,7 @@ class rw_landing(base):
         controls = list()
         ux = list(); uy=list()
         for line in full_state:
+            print(line)
             res.append(self._dim_back(line[:6]))
             controls.append(self._pontryagin_minimum_principle(line))
             ux.append(controls[-1][0] * sin(line[4]))
@@ -325,7 +329,7 @@ class rw_landing(base):
     def produce_data(self, x, npoints):
 
         # Producing the data
-        tspan = linspace(0, x[-1], 100)
+        tspan = linspace(0, x[-1], npoints)
         full_state, info = self._simulate(x, tspan)
         # Putting dimensions back
         res = list()

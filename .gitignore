@@ -4,6 +4,11 @@ examples/data/
 examples/traj/
 examples/nets/
 .idea/*
+indirect_method/*
+logs/
+generate_data/*
+nets/*
+traj/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
